@@ -1,0 +1,10 @@
+name: napari-selectROI
+contributions:
+  commands:
+    - id: napari-selectROI.roi
+      title: Select rectangular ROI from the upper left corner
+      python_name: napari_selectROI:select_ROI
+  widgets:
+    - command: napari-selectROI.roi  # note, same as command.id above
+      display_name: Select ROI
+      autogenerate: true

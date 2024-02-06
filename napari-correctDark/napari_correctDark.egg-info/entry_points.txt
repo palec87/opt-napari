@@ -1,0 +1,2 @@
+[napari.manifest]
+napari-correctDark = napari_correctDark:napari.yaml

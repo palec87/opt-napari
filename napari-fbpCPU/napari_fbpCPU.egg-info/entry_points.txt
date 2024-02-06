@@ -1,0 +1,2 @@
+[napari.manifest]
+napari-fbpCPU = napari_fbpCPU:napari.yaml

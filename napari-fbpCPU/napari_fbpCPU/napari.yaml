@@ -1,0 +1,10 @@
+name: napari-fbpCPU
+contributions:
+  commands:
+    - id: napari-fbpCPU.fbp
+      title: Filter back projection reconstruction
+      python_name: napari_fbpCPU:fbp
+  widgets:
+    - command: napari-fbpCPU.fbp  # note, same as command.id above
+      display_name: FBP
+      autogenerate: true

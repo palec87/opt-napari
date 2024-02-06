@@ -1,0 +1,10 @@
+pyproject.toml
+setup.cfg
+napari_correctDark/__init__.py
+napari_correctDark/widget_funcs.py
+napari_correctDark.egg-info/PKG-INFO
+napari_correctDark.egg-info/SOURCES.txt
+napari_correctDark.egg-info/dependency_links.txt
+napari_correctDark.egg-info/entry_points.txt
+napari_correctDark.egg-info/requires.txt
+napari_correctDark.egg-info/top_level.txt
