@@ -17,10 +17,28 @@ import tomopy as tom
 
 
 def calc_thetas(steps):
+    """2 pi equidistant steps
+
+    Args:
+        steps (int): number of steps per full revolution
+
+    Returns:
+        np.array: array of steps
+    """
     return np.linspace(0., 360., steps, endpoint=False) / 360. * (2 * np.pi)
 
 
 def run_fbp(data, thetas, center=None):
+    """Run FBP of the OPT andimage stack
+
+    Args:
+        data (np.array): 3d stack of images, first dim is the angle (OPT step)
+        thetas (np.array): angles attributed to steps
+        center (np.arrays, optional): array of CORs. Defaults to None.
+
+    Returns:
+        np.array: 3d array of reconstructed volume (first dim is camera lines)
+    """
     height = data.shape[1]
     try:
         r1 = tom.recon(data[:, height//2:height//2+1, :], thetas,
@@ -32,6 +50,7 @@ def run_fbp(data, thetas, center=None):
                        center=center,
                        sinogram_order=False,
                        algorithm='art')
+    # data reallocation
     data_recon = np.zeros((data.shape[1], *r1.squeeze().shape), dtype=np.int16)
     for i in tqdm(range(height)):
         try:
@@ -49,7 +68,17 @@ def run_fbp(data, thetas, center=None):
     return data_recon
 
 
-def run_fbp_thread(data, thetas, centers):
+def run_fbp_thread(data: np.ndarray, thetas: np.array, centers:np.array)-> np.array:
+    """Run threaded reconstruction.
+
+    Args:
+        data (np.ndarray): image stack
+        thetas (np.array): angles attributed to steps
+        centers (np.array): CORs
+
+    Returns:
+        np.array: reconstructed 3D volume
+    """
     height = data.shape[1]
     r1 = tom.recon(data[:, height//2:height//2+1, :], thetas,
                    center=centers[height//2],
@@ -88,6 +117,15 @@ def fbp(viewer: Viewer,
         cor_step: int = 100,
         thread: bool = False,
         ):
+    """_summary_
+
+    Args:
+        viewer (Viewer): _description_
+        image (Image): _description_
+        COR (bool, optional): _description_. Defaults to False.
+        cor_step (int, optional): _description_. Defaults to 100.
+        thread (bool, optional): _description_. Defaults to False.
+    """
     original_stack = np.asarray(image.data, dtype=np.int16)
     n_steps, height, _ = original_stack.shape
     thetas = calc_thetas(n_steps)
