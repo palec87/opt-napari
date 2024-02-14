@@ -142,7 +142,7 @@ history = Backtrack()
 # This widget just because not using pyqt
 @magic_factory(call_button="Update",
                Operation_mode={"choices": update_modes})
-def settings(Operation_mode=update_modes.inplace_notrack):
+def settings(Operation_mode=update_modes.inplace_NOtrack):
     """Widget to select global settings of inplace operations and tracking
 
     Args:
