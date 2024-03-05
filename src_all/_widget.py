@@ -33,12 +33,11 @@ class Backtrack:
     roi_def: tuple = ()     # indices refer always to raw data
     history_item = dict()   # operation, data, roi_def, bin_factor
 
-    # DP: The flags will be moved to the widget
+    # DP: The flags will be moved to the widget I think
     inplace: bool = True
     track: bool = False
 
     #############################
-    # This is all stupid and should be done as QT widget
     # DP: parts needs to stay, flags from checkbox updates can control behavior
     #############################
 
