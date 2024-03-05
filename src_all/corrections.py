@@ -1,42 +1,40 @@
 #!/usr/bin/env python
 
-'''
+"""
 Corrections module for the microscopy acquisition
 
 corrections available:
-
 #. Dark-field correction
-
-  * Always applicable and should be always done
-
+    * Always applicable and should be always performed
 #. Flat-field, ie bright-field correction
-
-  * Applicable only transmission measurements
-
+    * Important for transmission measurements. Performs badly
+        on the floating elements in the FOV
+    * Harder to do for the Fluorescence, because of the excitation scatter
+        leaking through filters.
+    * Flat field can be used to identify dead pixels too
 #. Hot pixel correction
-
-  * Hot pixels identified from long exposure acquisition on the blocked camera
-
-  * Possible to correct as mean of 4 or 8 neighbours
-  
-  * Might not be necessary for the transmission measurements
-
-#. TODO: Intensity correction
-
-  * More crucial for the shorter exposure times (depends on which time-scale the light-source drifts.)
+    * Hot pixels obtained from long exposure on the blocked camera
+    * Dead pixels form flat field acquisition.
+    * TODO Notimplemented: Alternative you can use it for dead pixel
+        identification (rename to BadPixel correction)
+    * Possible to correct as mean of 4 or 8 neighbours
+TODO: Intensity correction
+More crucial for the shorter exposure times (less averaging of the source
+intensity variations), which depends on which time-scale the light-source
+drifts.
 
 Notes:
-
-* Exposure on the dark and bright field corrections must be same and same as the experimental exposure.
+* Exposure on the dark and bright field corrections must be
+the same as the experimental exposure.
 * TODO: Need to ensure correct logic of the correction and their redefinition.
-
-'''
+    Is the logic supposed to be taken care of on this class level?
+"""
 
 import numpy as np
 from utils import norm_img, img_to_int_type, is_positive
 
 
-class Correct(object):
+class Correct():
     """Correcting raw data from 2D array acquisitions. Currently implemented
     corrections are:
 
@@ -44,9 +42,6 @@ class Correct(object):
     #. Bright-field
     #. Hot-pixel correction
     #. Intensity correction.
-
-    Args:
-        object (object): general python object
     """
     def __init__(self, hot=None, std_mult=7, dark=None, bright=None):
         try:
@@ -82,14 +77,14 @@ class Correct(object):
         self.std = np.std(self.hot, dtype=np.float64)
 
         self.mask = np.ma.masked_greater(
-                                self.hot, 
-                                self.mean + self.std_mult * self.std,
-                                )
+                        self.hot,
+                        self.mean + self.std_mult * self.std,
+                        )
 
         hot_pxs = []
 
         # if mask did not get any hot pixels, return empty list
-        if np.all(self.mask.mask == False):
+        if np.all(self.mask.mask is False):
             print('No hot pixels identified')
             return hot_pxs
 
@@ -161,7 +156,7 @@ class Correct(object):
             ans[hot_px] = int(np.mean(neigh_vals))
 
         # test for negative values
-        is_positive(ans)
+        is_positive(ans, 'Bad-pixel')
 
         # cast it on correct dtype
         ans = img_to_int_type(ans, dtype=ans.dtype)
@@ -169,7 +164,7 @@ class Correct(object):
 
     def correct_dark(self, img):
         """Subtract dark image from the img.
-        TODO: treating if dark correction goes negative??
+        TODO: treating if dark correction goes negative?? Ask if to continue?
 
         Args:
             img (np.array): Img to be corrected
@@ -186,7 +181,7 @@ class Correct(object):
         # correction
         ans = img - self.dark
         # test for negative values
-        is_positive(ans)
+        is_positive(ans, 'Dark-field')
 
         # cast it on correct dtype
         ans = img_to_int_type(ans,  dtype=img.dtype)
@@ -207,36 +202,42 @@ class Correct(object):
         if self.bright.shape != img.shape:
             raise IndexError('images do not have the same shape')
 
-        # direct correction or bright needs to be first corrected with
-        # dark and hot pixels.
+        # bright-field needs to be first corrected with
+        # dark and hot pixels if possible
         try:
             self.bright_corr = norm_img(self.bright_corr)
         except:
-            print('Probably bright is not yet dark and hot corrected, tyring that')
-            self.bright_corr = self.correct_dark(self.bright)  # this could be done only once
+            print('Probably bright is not yet dark/hot corrected, trying that')
+            # TODO: ensure this is done only once. Should offer redoing it
+            # from the raw image, if user tries to run this second time.
+            self.bright_corr = self.correct_dark(self.bright)
             if self.hot is None:
                 pass
             else:
                 try:
-                    self.bright_corr = self.correct_hot(self.bright_corr)  # this too
+                    # the same as above, run only once.
+                    self.bright_corr = self.correct_hot(self.bright_corr)
                 except TypeError:
                     pass
-            self.bright_corr = norm_img(self.bright_corr)
 
+            # normalize to one (return floats)
+            self.bright_corr = norm_img(self.bright_corr)
+        # not overflow, because a float
         ans = img / self.bright_corr
 
         # test for negative values
-        is_positive(ans)
+        is_positive(ans, 'Bright-field')
 
-        # cast it on correct dtype
+        # cast it on correct dtype, and clips negative values!!
         ans = img_to_int_type(ans, dtype=img.dtype)
         return ans
 
-    def correct_int(self, img_stack: np.array, mode='integral',
-                    use_bright=True, rect_dim=50,
-                    cast_to_int=True):
-        """OPT intensity correction over the stack of projections, preferable
-        corrected for dark, bright, and hot pixels
+    def correct_int(self, img_stack: np.ndarray, mode: str = 'integral',
+                    use_bright: bool = True, rect_dim: int = 50,
+                    cast_to_int: bool = True):
+        """Intensity correction over the stack of images which are expected
+        to have the same background intensity. It is preferable to
+        corrected for dark, bright, and bad pixels first
 
         Args:
             img_stack (np.array): 3D array of images, third dimension is
@@ -278,6 +279,7 @@ class Correct(object):
         print('shape ref:', [k.shape for k in ref])
 
         # integral takes sum over pixels of interest
+        # TODO: This if else structure is cumbersome
         if mode == 'integral':
             # sum of all pixels over all four squares
             # this is one number
@@ -314,7 +316,7 @@ class Correct(object):
         self.stack_int = np.array(stack_int)
 
         # test for negative values
-        is_positive(corr_stack)
+        is_positive(corr_stack, 'Intensity')
 
         # cast it on correct dtype
         if cast_to_int:
@@ -322,6 +324,7 @@ class Correct(object):
 
         return corr_stack
 
+    # This method not used in the napari plugin
     def correct_all(self, img: np.array, mode_hot='n4') -> np.array:
         """
         Perform all available corrections for single np.array image.

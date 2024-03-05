@@ -5,6 +5,12 @@ import warnings
 from napari.utils import progress, notifications
 
 
+"""
+Utility functions for the widget and for the Correct class
+TODO: perform timing on real data and consider threading.
+"""
+
+
 def select_roi(stack: np.ndarray,
                ul_corner, height: int,
                width: int) -> tuple[np.ndarray, tuple]:
@@ -46,10 +52,12 @@ def select_roi(stack: np.ndarray,
     return roi, roi_pars
 
 
+# TODO: should there be sum method allowed?
 def bin_3d(stack: np.ndarray, bin_factor: int) -> np.ndarray:
     """
-    Bin stack of images. First dim is the stacking one.
-    Binning is along axis 1, 2. Result is casted on integer.
+    Bin stack of images applying mean on the binned pixels.
+    First dim is the stacking one. Binning is along axis 1, 2.
+    Result is casted on integer.
 
     Args:
         stack (np.ndarray): stack of images
@@ -71,10 +79,10 @@ def bin_3d(stack: np.ndarray, bin_factor: int) -> np.ndarray:
     ans = np.empty((stack.shape[0], height_dim, width_dim),
                    dtype=int,
                    )
-    # TODO: this throws error if reshape not exact I think.
+    # TODO: this throws error if reshape not exact, needs a fix.
     for i in progress(range(stack.shape[0])):
         ans[i] = stack[i].reshape(height_dim, bin_factor,
-                                  width_dim, bin_factor).sum(3).sum(1)
+                                  width_dim, bin_factor).mean(3).mean(1)
     return ans
 
 
@@ -93,14 +101,14 @@ def norm_img(img: np.array, ret_type='float') -> np.array:
     Returns:
         np.array: normalized array to 1
     """
-    return img/np.amax(img) if ret_type == 'float' else (img/np.amax(img)).astype(ret_type)
+    return img/np.amax(img) if ret_type == 'float'else (img/np.amax(img)).astype(ret_type)
 
 
 def img_to_int_type(img: np.array, dtype: np.dtype = np.int_) -> np.array:
     """
     After corrections, resulting array can be dtype float. Two steps are
     taken here. First convert to a chosed dtype and then clip values as if it
-    was unsigned int, which the images are.shape
+    was unsigned int, which the images are.
 
     Args:
         img (np.array): img to convert
@@ -110,7 +118,8 @@ def img_to_int_type(img: np.array, dtype: np.dtype = np.int_) -> np.array:
     Returns:
         np.array: array of type int
     """
-
+    # TODO: take care of 12 bit images, how to identify them in order
+    # to normalize on 2**12-1 but witll on 16bit. Memory saving in practice
     if dtype == np.int8:
         ans = np.clip(img, 0, 255).astype(dtype)
     elif dtype == np.int16:
@@ -122,6 +131,8 @@ def img_to_int_type(img: np.array, dtype: np.dtype = np.int_) -> np.array:
     return ans
 
 
-def is_positive(img):
+def is_positive(img, corr_type='Unknown'):
     if np.any(img < 0):
-        warnings.warn('Dark-field correction: Some pixel are negative, casting them to 0.')
+        warnings.warn(
+            f'{corr_type} correction: Some pixel < 0, casting them to 0.',
+            )

@@ -152,6 +152,11 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
+napari-correctDark/
+napari-fbpCPU/
+napari-selectROI/
+first_widget.py
+
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
 #  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
