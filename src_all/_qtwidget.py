@@ -153,6 +153,7 @@ class Backtrack:
         
         self.track = value
         if self.track is True:
+            pass
 
 
     def update_history(self, operation, data_dict):

@@ -12,7 +12,7 @@ TODO: perform timing on real data and consider threading.
 
 
 def select_roi(stack: np.ndarray,
-               ul_corner, height: int,
+               ul_corner: tuple, height: int,
                width: int) -> tuple[np.ndarray, tuple]:
     """
     Select ROI relative to Upper Left (UL) corner point. If points
@@ -20,35 +20,37 @@ def select_roi(stack: np.ndarray,
 
     Args:
         stack (np.ndarray): Stack of images, firs dim is stacking dim
-        ul_corner (napari point): napari point layer
+        ul_corner (tuple): tuple of x_coord, y_coord
         height (int): ROI's height
-        width (int): ROI's
+        width (int): ROI's width
 
     Raises:
-        IndexError: If height or width exceeds the limits of the images.
-            In that case largest possible ROI is taken and warning is shown.
+        ValueError: If l_corner is not a 2-tuple. Or if array is not 2D or 3D
 
     Returns:
-        np.ndarray: ROIs from the stack
+        tuple[np.ndarray, tuple]: ROIs image data, tuple of  from the stack
     """
-    _, ix, iy = ul_corner.astype(int)
-
-    # takes care of ROI beyond the image size
     try:
-        roi = stack[:,
-                    ix: ix + height,
-                    iy: iy + width]
-        roi_pars = (ix, ix + height, iy, iy + width)
-    except IndexError:
-        notifications.show_warning(
-            'Too large ROI for the image, selecting maximum possible size.',
+        x1, y1 = [int(k) for k in ul_corner]
+    except ValueError:
+        notifications.show_error(
+            'UL corner must be defined by tuple of (x_coord, y_coord).',
             )
-        iix = min(ix + height, stack.shape[1])
-        iiy = min(iy + width, stack.shape[2])
-        roi = stack[:,
-                    ix: iix,
-                    iy: iiy]
-        roi_pars = (ix, iix, iy, iiy)
+
+    # ensure that limits of the arrays are respected
+    x2 = min(x1 + height, stack.shape[-2])
+    y2 = min(y1 + width, stack.shape[-1])
+    # takes care of ROI beyond the image size
+    if stack.ndim == 2:
+        roi = stack[x1: x2, y1: y2]
+
+    elif stack.ndim == 3:
+        roi = stack[:, x1: x2, y1: y2]
+    else:
+        # Handle other dimensions if needed
+        raise ValueError("Array dimension not supported")
+
+    roi_pars = (x1, x2, y1, y2)
     return roi, roi_pars
 
 
@@ -136,3 +138,6 @@ def is_positive(img, corr_type='Unknown'):
         warnings.warn(
             f'{corr_type} correction: Some pixel < 0, casting them to 0.',
             )
+        # return for testing purposes, can be better?
+        return 1
+    return 0

@@ -197,11 +197,12 @@ def select_ROIs(viewer: Viewer,
                 roi_width: Annotated[int, {'min': 1, 'max': 5000}] = 200,
                 ):
     original_stack = np.asarray(image.data)
-    points = np.asarray(points_layer.data)
-    notifications.show_info(f'UL corner coordinates: {points[0][1:].astype(int)}')
+    lastPoint = points_layer.data[-1]
+
+    notifications.show_info(f'UL corner coordinates: {lastPoint.astype(int)}')
 
     selected_roi, roi_pars = select_roi(original_stack,
-                                        points[-1],
+                                        tuple(lastPoint),
                                         roi_height,
                                         roi_width)
     if history.inplace:
