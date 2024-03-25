@@ -10,9 +10,9 @@ Utility functions for the widget and for the Correct class
 TODO: perform timing on real data and consider threading.
 """
 
-
 def select_roi(stack: np.ndarray,
-               ul_corner, height: int,
+               ul_corner,
+               height: int,
                width: int) -> tuple[np.ndarray, tuple]:
     """
     Select ROI relative to Upper Left (UL) corner point. If points
@@ -31,6 +31,7 @@ def select_roi(stack: np.ndarray,
     Returns:
         np.ndarray: ROIs from the stack
     """
+
     _, ix, iy = ul_corner.astype(int)
 
     # takes care of ROI beyond the image size
@@ -50,6 +51,46 @@ def select_roi(stack: np.ndarray,
                     iy: iiy]
         roi_pars = (ix, iix, iy, iiy)
     return roi, roi_pars
+
+# def select_roi(stack: np.ndarray,
+#                ul_corner, height: int,
+#                width: int) -> tuple[np.ndarray, tuple]:
+#     """
+#     Select ROI relative to Upper Left (UL) corner point. If points
+#     layer contains more than 1 point, the last point is considered.
+
+#     Args:
+#         stack (np.ndarray): Stack of images, firs dim is stacking dim
+#         ul_corner (napari point): napari point layer
+#         height (int): ROI's height
+#         width (int): ROI's
+
+#     Raises:
+#         IndexError: If height or width exceeds the limits of the images.
+#             In that case largest possible ROI is taken and warning is shown.
+
+#     Returns:
+#         np.ndarray: ROIs from the stack
+#     """
+#     _, ix, iy = ul_corner.astype(int)
+
+#     # takes care of ROI beyond the image size
+#     try:
+#         roi = stack[:,
+#                     ix: ix + height,
+#                     iy: iy + width]
+#         roi_pars = (ix, ix + height, iy, iy + width)
+#     except IndexError:
+#         notifications.show_warning(
+#             'Too large ROI for the image, selecting maximum possible size.',
+#             )
+#         iix = min(ix + height, stack.shape[1])
+#         iiy = min(iy + width, stack.shape[2])
+#         roi = stack[:,
+#                     ix: iix,
+#                     iy: iiy]
+#         roi_pars = (ix, iix, iy, iiy)
+#     return roi, roi_pars
 
 
 # TODO: should there be sum method allowed?

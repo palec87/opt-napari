@@ -1,33 +1,34 @@
-import numpy as np
-from napari.layers import Image, Points
-from magicgui import magic_factory
-from napari import Viewer
-from napari.utils import notifications
-
-from typing import Annotated
-import warnings
-import os 
-from .widget_settings import Settings, Combo_box
+# import numpy as np
+# from napari import Viewer
+# from typing import Annotated
+# import os
 #import processors
+# from qtpy.QtCore import Qt
+# import numpy as np
+# from napari.qt.threading import thread_worker
+# import warnings
+# from time import time
+# import scipy.ndimage as ndi
+# import cv2 
+# import tqdm
+# from corrections import Correct
+# from dataclasses import dataclass
+from napari.viewer import current_viewer
+from typing import List
+
+from napari.layers import Layer, Image, Points
+from magicgui import magic_factory
+from napari.utils import notifications
+import warnings 
+from widget_settings import Settings, Combo_box
 import napari
 from qtpy.QtWidgets import QVBoxLayout, QSplitter, QHBoxLayout, QWidget, QPushButton, QLineEdit, QSpinBox, QDoubleSpinBox, QFormLayout, QComboBox, QLabel
-# from qtpy.QtCore import Qt
-from napari.layers import Image
-import numpy as np
-from napari.qt.threading import thread_worker
-import warnings
-from time import time
-import scipy.ndimage as ndi
 from enum  import Enum
-import cv2 
-import tqdm
-from corrections import Correct
 
 from utils import (
     select_roi,
     bin_3d,
 )
-from dataclasses import dataclass
 
 class PreprocessingnWidget(QWidget):
     name = 'Preprocessor'
@@ -36,6 +37,7 @@ class PreprocessingnWidget(QWidget):
         self.viewer = viewer
         super().__init__()
         self.setup_ui()
+        # self.start_preprocessing()
         # self.viewer.dims.events.current_step.connect(self.select_index)
     
     def setup_ui(self):
@@ -47,12 +49,18 @@ class PreprocessingnWidget(QWidget):
             from qtpy.QtCore import Qt
             splitter = QSplitter(Qt.Vertical)
             _layout.addWidget(splitter)
-            # _layout.addWidget(QLabel(_title))
+            # _layout.addWidget(QLabel(_title))        
         
-
         image_layout = QVBoxLayout()
         add_section(image_layout,'Image selection')
         layout.addLayout(image_layout)
+        
+        self.multiple_layers_widget = multiple_layers()
+        self.multiple_layers_widget.call_button.visible = False
+        self.add_magic_function(self.multiple_layers_widget, image_layout)
+        select_button = QPushButton('Select layers')
+        select_button.clicked.connect(self.select_layers)
+        image_layout.addWidget(select_button)
         
         self.choose_layer_widget = choose_layer()
         self.choose_layer_widget.call_button.visible = False
@@ -60,269 +68,207 @@ class PreprocessingnWidget(QWidget):
         select_button = QPushButton('Select image layer')
         select_button.clicked.connect(self.select_layer)
         image_layout.addWidget(select_button)
+        
+        self.choose_points_layer_widget = choose_points_layer()
+        self.choose_points_layer_widget.call_button.visible = False
+        self.add_magic_function(self.choose_points_layer_widget, image_layout)
+        select_points_button = QPushButton('Select points layer')
+        select_points_button.clicked.connect(self.select_points_layer)
+        image_layout.addWidget(select_points_button)
 
         settings_layout = QVBoxLayout()
         add_section(settings_layout,'Settings')
         layout.addLayout(settings_layout)
         self.createSettings(settings_layout)
+        
+    def add_magic_function(self, widget, _layout):
+        self.viewer.layers.events.inserted.connect(widget.reset_choices)
+        self.viewer.layers.events.removed.connect(widget.reset_choices)
+        _layout.addWidget(widget.native)
+            
+    def select_layer(self,image: Image):
+    
+        image = self.choose_layer_widget.image.value
+        
+        if image.data.ndim == 3:
+            
+            self.imageRaw_name = image.name
+            sz,sy,sx = image.data.shape
+            # print(sz, sy, sx)
+            # if not hasattr(self, 'h'): 
+            #     self.start_preprocessing()
+            print(f'Selected image: {image.name}')
+    
+    def select_layers(self, x: List[Layer]):
+        
+        names = []
+        layers_list = self.example_widget.x.value
+        
+        for layer in layers_list:
+            self._layer_name = layer.name
+            names.append(layer.name)
+            print(f'Selected layer: {layer.name}')
+        print(names)
+        return names
+    
+    def select_points_layer(self,       ##TODO it is not correct like this, we need one function that collects all layers
+                     points: Points):
+    
+        points = self.choose_points_layer_widget.points.value
+        self._points_name = points.name
+        print(f'Selected points: {points.name}')
 
     def createSettings(self, slayout):
         
-        self.reshapebox = Settings('Reshape volume',
-                                  dtype=bool,
-                                  initial = True, 
-                                  layout=slayout, 
-                                  write_function = self.set_opt_processor)        
-
-        self.resizebox = Settings('Reconstruction size',
+        layout = QVBoxLayout() ##TODO change layout, put the 2 checkboxes one near to the other
+        
+        self.inplace = Settings('Inplace operations', dtype=bool, initial=False,
+                                      layout=slayout, 
+                                      write_function = self.set_preprocessing)
+        
+        self.track = Settings('Track', dtype=bool, initial=False,
+                                      layout=slayout,
+                                      write_function = self.set_preprocessing)
+        
+        self.std_cutoff = Settings('Std cutoff',
                                   dtype=int, 
-                                  initial=100, 
+                                  initial=5,
                                   layout=slayout, 
-                                  write_function = self.set_opt_processor)
+                                  write_function = self.set_preprocessing)
         
-        self.clipcirclebox = Settings('Clip to circle',
-                            dtype=bool,
-                            initial = False, 
-                            layout=slayout, 
-                            write_function = self.set_opt_processor)        
-
-        self.filterbox = Settings('Use filtering',
-                            dtype=bool,
-                            initial = False, 
-                            layout=slayout, 
-                            write_function = self.set_opt_processor) 
-        
-
-        self.registerbox = Settings('Automatic axis alignment',
-                                  dtype=bool,
-                                  initial=False, 
+        self.roi_height = Settings('ROI height',
+                                  dtype=int, 
+                                  initial=200,
+                                  vmin = 1,
+                                  vmax = 5000,
                                   layout=slayout, 
-                                  write_function = self.set_opt_processor)
+                                  write_function = self.set_preprocessing)
         
-        self.manualalignbox = Settings('Manual axis alignment',
-                            dtype=bool,
-                            initial = False, 
-                            layout=slayout, 
-                            write_function = self.set_opt_processor) 
+        self.roi_width = Settings('ROI width',
+                                  dtype=int, 
+                                  initial=200,
+                                  vmin = 1,
+                                  vmax = 5000,
+                                  layout=slayout, 
+                                  write_function = self.set_preprocessing)
+
+        self.bin_factor = Settings('Bin factor',
+                                  dtype=int, 
+                                  initial=2,
+                                  vmin = 1,
+                                  vmax = 500,
+                                  layout=slayout, 
+                                  write_function = self.set_preprocessing)    
         
-        self.alignbox = Settings('Axis shift',
-                            dtype=int,
-                            vmin=-500,
-                            vmax=500, 
-                            initial=0, 
-                            layout=slayout, 
-                            write_function = self.set_opt_processor)
+    #     # self.listlayers = Combo_box(name = 'Layer_lit', choices = Accel.available(),
+    #     #                           layout=right_layout,
+    #     #                           write_function = self.setReconstructor)    
+        # buttons
+        buttons_dict = {'Select ROI': self.select_ROIs,
+                        'Binning': self.bin_stack
+                        }
+        for button_name, call_function in buttons_dict.items():
+            button = QPushButton(button_name)
+            button.clicked.connect(call_function)
+            slayout.addWidget(button)
+        self.messageBox = QLineEdit()
+        layout.addWidget(self.messageBox, stretch=True)
+        self.messageBox.setText('Messages') #not working, I think
         
+    
+    def get_image(self):
+        try:
+            
+            return self.viewer.layers[self.imageRaw_name].data
+        except:
+             raise(KeyError(r'Please select a valid 3D image ($\theta$, q, z)'))
+             
+    def get_points(self): ##TODO it would be good to have just one function to select all layers
+        try:
+            
+            return self.viewer.layers[self._points_name].data
+        except:
+             raise(KeyError(r'Please select a valid Points layer'))
+             
+    def show_image(self, image_values, _inplace_value, fullname):
         
+        # if 'scale' in kwargs.keys():    #GT: do we need to scale?
+        #     scale = kwargs['scale']
+        # else:
+        #     scale = [1.]*image_values.ndim
         
-        #create combobox for reconstruction method
-        self.reconbox = Combo_box(name ='Reconstruction method',
-                             initial = Rec_modes.FBP_GPU.value,
-                             choices = Rec_modes,
-                             layout = slayout,
-                             write_function = self.set_opt_processor)
+        if _inplace_value == True:   ##TODO consider to add option to update existing layer
+            fullname = self.imageRaw_name
+            
+            self.viewer.layers[fullname].data = image_values
+            # self.viewer.layers[fullname].scale = scale
         
-        self.orderbox = Combo_box(name ='Rotation axis',
-                             initial = Order_Modes.Horizontal.value,
-                             choices = Order_Modes,
-                             layout = slayout,
-                             write_function = self.set_opt_processor)
+        else:  
+            layer = self.viewer.add_image(image_values,
+                                            name = fullname,
+                                            # scale = scale,
+                                            interpolation2d = 'linear')
+            return layer
+    
+    def set_preprocessing(self, *args):
+        '''
+        Sets preprocessing parameters
+        '''
 
-        # add calculate psf button
-        calculate_btn = QPushButton('Reconstruct')
-        calculate_btn.clicked.connect(self.stack_reconstruction)
-        slayout.addWidget(calculate_btn)
+        if hasattr(self, 'h'):
+            
+            self.h.inplace_val = self.inplace.val
+            self.h.track_val = self.track.val
+            self.h.cutoff_val = self.std_cutoff.val
+            self.h.height_val = self.roi_height.val
+            self.h.width_val = self.roi_width.val
+            self.h.binning_val = self.bin_factor.val
+            
+            # self.h.set_reconstruction_process()
+            
+    #select ROIs    
+    def select_ROIs(self): ##TODO add tracking option for select_ROIs and bin_stack
+ 
+        original_image = self.get_image()
+        points = self.get_points()
+        _inplace_value = self.inplace.val
+        fullname = 'ROI_' + self.imageRaw_name
+        notifications.show_info(f'UL corner coordinates: {points[0][1:].astype(int)}')
+        selected_roi, roi_pars = select_roi(original_image, points[-1], self.roi_height.val, self.roi_width.val)
+        self.show_image(selected_roi, _inplace_value, fullname)
 
+    #binning
+    def bin_stack(self):
+    
+            if self.bin_factor != 1:
+                original_image = self.get_image()
+                _inplace_value = self.inplace.val
+                fullname = 'Binned_' + self.imageRaw_name
+                binned_roi = bin_3d(original_image, self.bin_factor.val)
+                notifications.show_info(f'Original shape: {original_image.shape}, binned shape: {binned_roi.shape}')
+                self.show_image(binned_roi, _inplace_value, fullname)
+            else:
+                notifications.show_info('Bin factor is 1, nothing to do.')
+                
+def current_layers(_):
+    return list(current_viewer().layers)
 
-@dataclass
-class Backtrack:
-    """ 
-    Supports one undo operation. Only for inplace operations.
-    Will break if:
-        You operate on more datasets in parallel
-    """
-    # def __init__(self) -> None:
-    raw_data: np.ndarray = None
-    last_data: np.ndarray = None
-    # roi_def: tuple = ()  # indices refer always to raw data
-    track: bool = False
-    inplace: bool = False
-    history_item = dict()
-
-    def update_tracking(self, value: bool):
+@magic_factory(x={'widget_type': 'Select', "choices": current_layers})
+def multiple_layers(x: List[Layer]):
+    pass
         
-        self.track = value
-        if self.track is True:
-
-
-    def update_history(self, operation, data_dict):
-        if operation == 'roi':
-            pass
-        elif operation == 'bin':
-            pass
-        elif operation == 'correct':
-            pass
-        else:
-            raise TypeError('Unknown operation to update history.')
-        
-        self.operation = operation
-        
-    def revert_history(self):
-        pass
-
-    def revert_to_raw(self):
-        pass
-
-
-history = Backtrack()
-
-
-# ROI
-@magic_factory(call_button="Select ROI")
-def select_ROIs(viewer: Viewer,
-                image: Image,
-                points_layer: Points,
-                roi_height: Annotated[int, {'min': 1, 'max': 5000}] = 200,
-                roi_width: Annotated[int, {'min': 1, 'max': 5000}] = 200,
-                inplace: bool = True,
-                track_history: bool = False,
-                ):
-    shared_variables.track = track_history
-    original_stack = np.asarray(image.data)
-    points = np.asarray(points_layer.data)
-    notifications.show_info(f'UL corner coordinates: {points[0][1:].astype(int)}')
-
-    selected_roi, roi_pars = select_roi(original_stack,
-                                        points[-1],
-                                        roi_height,
-                                        roi_width)
-    # if I do this twice, I will get wrong indicis for corrections!!!
-    update_roi_pars(roi_pars)
-    # shared_variables.roi_def: roi_pars
-    # partial solution to tracking history
-    # TODO: does not work, if you are on wrong layer, or perhaps
-    # user deleted one layer going back one step, and wants to do another step
-    # Or changes the inplace parameter inbetween
-    # LOts of lose ends here!!!!
-    if inplace:
-        update_history(inplace, image, selected_roi)
-    else:
-        viewer.add_image(selected_roi)
-
-
-# this will not work, if user applies it once on the roi and then again on the
-# raw, fuck me...
-# Fixing means making the history a proper class.
-def update_roi_pars(roi_pars):
-    if shared_variables.roi_def == ():
-        shared_variables.roi_def = roi_pars
-    else:
-        i1, i2, i3, i4 = shared_variables.roi_def
-        j1, j2, j3, j4 = roi_pars
-        shared_variables.roi_def = (
-            i1 + j1, i1 + j1 + j2,
-            i3 + j3, i3 + j3 + j4,
-        )
-
-
-def update_history(inplace: bool, image: Image, new_image: np.ndarray):
-    if not shared_variables.track:
-        notifications.show_info('Tracking not enabled, no history to update (saving RAM).')
-        return
-    if not inplace:
-        notifications.show_info('Not an inplace operation, no tracking, just delete the layer.')
-        return
-
-    if shared_variables.raw_data is None:
-        shared_variables.raw_data = image.data.copy()
-    else:
-        shared_variables.last_data = image.data.copy()
-
-    image.data = new_image
-    return
-
-
-# Revert history
-@magic_factory(call_button="Undo Last")
-def revert_last(viewer: Viewer, image: Image, inplace: bool):
-    if not shared_variables.track:
-        notifications.show_info('Tracking not enabled, no history to update (saving RAM).')
-        return
-
-    if shared_variables.last_data is not None:
-        notifications.show_info('Reverting to last data')
-        if inplace:
-            image.data = shared_variables.last_data
-        else:
-            viewer.add_image(shared_variables.last_data)
-        shared_variables.last_data = None
-
-    elif shared_variables.last_data is None and shared_variables.raw_data is not None:
-        notifications.show_info('Reverting to raw data')
-        if inplace:
-            image.data = shared_variables.raw_data
-        else:
-            viewer.add_image(shared_variables.raw_data)
-    else:
-        notifications.show_info('Nothing to revert to.')
-
-
-# Binning
-@magic_factory(call_button="Bin")
-def bin_stack(viewer: Viewer,
-              image: Image,
-              bin_factor: Annotated[int, {'min': 1, 'max': 500}] = 2,
-              ):
-    if bin_factor != 1:
-        binned_roi = bin_3d(image.data, bin_factor)
-        notifications.show_info(f'Original shape: {image.data.shape}, binned shape: {binned_roi.shape}')
-        viewer.add_image(binned_roi)
-    else:
-        notifications.show_info('Bin factor is 1, nothing to do.')
-
-
-# Image corrections
-# use Correct class
-@magic_factory(call_button="Image Corrections")
-def corrections(viewer: Viewer,
-                image: Image,
-                hot: Image = None,
-                std_cutoff: int = 5,
-                dark: Image = None,
-                bright: Image = None,
-                ):
-    original_stack = np.asarray(image.data)
-    # init correction class
-    Correct(hot, std_cutoff, dark, bright)
-
-    # # first correct bright field for dark
-    # bright_corr = bright.data - dark.data
-
-    # ans = np.empty(original_stack.shape)
-    # for i, img in enumerate(original_stack):
-    #     ans[i] = img - dark.data - bright_corr
-
-    # viewer.add_image(ans)
-
 @magic_factory
 def choose_layer(image: Image):
+        pass #TODO: substitute with a qtwidget without magic functions
+@magic_factory
+def choose_points_layer(points: Points):
         pass #TODO: substitute with a qtwidget without magic functions
 
 if __name__ == '__main__':
     import napari
+    
     viewer = napari.Viewer()
-    roi_widget = select_ROIs()
-    correct_widget = corrections()
-    bin_widget = bin_stack()
-    revert_widget = revert_last()
-
-    viewer.window.add_dock_widget(revert_widget, name='Undo Last',
-                                  area='right', add_vertical_stretch=True)
-    viewer.window.add_dock_widget(roi_widget, name='select ROI',
-                                  area='right', add_vertical_stretch=True)
-    viewer.window.add_dock_widget(bin_widget, name='Bin Stack',
-                                  area='right', add_vertical_stretch=True)
-    viewer.window.add_dock_widget(correct_widget, name='Image Corrections',
-                                  area='right', add_vertical_stretch=True)
-    warnings.filterwarnings('ignore')
+    mywidget = PreprocessingnWidget(viewer)
+    viewer.window.add_dock_widget(mywidget, name = 'Preprocessing Widget')
+    # warnings.filterwarnings('ignore')
     napari.run()
