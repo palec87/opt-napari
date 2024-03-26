@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 
-""" Testing the low level helper functions
-    """
+"""
+Testing the low level helper functions
+"""
 
 import pytest
 import numpy as np
@@ -20,7 +21,7 @@ __license__ = 'GPL'
     'arr_in, ULCorner, height, width, arr_out, roi_out',
     [(np.ones((5, 5)), (2, 2), 2, 2, np.ones((2, 2)), (2, 4, 2, 4)),
      ],
-    )
+)
 def test_select_roi(arr_in, ULCorner, height, width, arr_out, roi_out):
     out, roi_pars = select_roi(arr_in, ULCorner, height, width)
     assert roi_pars == roi_out
