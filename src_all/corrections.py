@@ -43,30 +43,34 @@ class Correct():
     #. Hot-pixel correction
     #. Intensity correction.
     """
-    def __init__(self, hot=None, std_mult=7, dark=None, bright=None):
-        try:
-            self.hot = hot.data
-        except AttributeError:
-            self.hot = hot
+    def __init__(self, hot: np.array = None, std_mult: float = 7.,
+                 dark: np.array = None, bright: np.array = None,
+                 ) -> None:
+        """ Initialize the correction class with the correction arrays.
+
+        Args:
+            hot (np.array, optional): Hot pixel acquisiion. Defaults to None.
+            std_mult (float, optional): STD cutoff for outliers (hot pixels).
+                Defaults to 7..
+            dark (np.array, optional): Dark counts camera acquisition.
+                Defaults to None.
+            bright (np.array, optional): Bright field correction acquisiiont.
+                Defaults to None.
+        """
+        self.hot = hot
         self.hot_pxs = None
         self.std_mult = std_mult
 
-        try:
-            self.dark = dark.data
-        except AttributeError:
-            self.dark = dark
+        self.dark = dark
         self.dark_corr = None
 
-        try:
-            self.bright = bright.data
-        except AttributeError:
-            self.bright = bright
+        self.bright = bright
         self.bright_corr = None
 
         if hot is not None:
             self.hot_pxs = self.get_hot_pxs()
 
-    def get_hot_pxs(self):
+    def get_hot_pxs(self) -> list[tuple[int, int]]:
         """
         Identify hot pixels from the hot array based on the hot
         std_mutl facter threshold. Hot pixel has intensity greater than
@@ -89,11 +93,11 @@ class Correct():
             return hot_pxs
 
         # otherwise iterate over the mask and append hot pixels to the list
-        for j, k in zip(*np.where(self.mask.mask)):
-            hot_pxs.append((j, k))
+        for row, col in zip(*np.where(self.mask.mask)):
+            hot_pxs.append((row, col))
         return hot_pxs
 
-    def correct_hot(self, img, mode='n4'):
+    def correct_hot(self, img: np.array, mode: str = 'n4') -> np.array:
         """Correct hot pixels from its neighbour pixel values. It ignores the
         neighbour pixel if it was identified as hot pixel itself.
 
@@ -111,7 +115,6 @@ class Correct():
         Returns:
             np.array: Corrected img array
         """
-
         if self.hot_pxs is None:
             raise RuntimeError(
                 'You must have hot pixel acquisition and run get_hot_pxs()')
@@ -153,6 +156,7 @@ class Correct():
 
                 neigh_vals.append(img[px[0], px[1]])
 
+            # replace hot pixel with the mean of the neighbours
             ans[hot_px] = int(np.mean(neigh_vals))
 
         # test for negative values
@@ -162,7 +166,7 @@ class Correct():
         ans = img_to_int_type(ans, dtype=ans.dtype)
         return ans
 
-    def correct_dark(self, img):
+    def correct_dark(self, img: np.array) -> np.array:
         """Subtract dark image from the img.
         TODO: treating if dark correction goes negative?? Ask if to continue?
 
@@ -234,7 +238,7 @@ class Correct():
 
     def correct_int(self, img_stack: np.ndarray, mode: str = 'integral',
                     use_bright: bool = True, rect_dim: int = 50,
-                    cast_to_int: bool = True):
+                    cast_to_int: bool = True) -> np.ndarray:
         """Intensity correction over the stack of images which are expected
         to have the same background intensity. It is preferable to
         corrected for dark, bright, and bad pixels first
@@ -253,7 +257,7 @@ class Correct():
             NotImplementedError: Checking available correction modes
 
         Returns:
-            np.array: 3D array of the same shape as the img_stack,
+            np.ndarray: 3D array of the same shape as the img_stack,
                 but intensity corrected
         """
         # do I want to correct in respect to the bright field
