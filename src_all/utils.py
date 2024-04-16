@@ -30,6 +30,12 @@ def select_roi(stack: np.ndarray,
     Returns:
         tuple[np.ndarray, tuple]: ROIs image data, tuple of  from the stack
     """
+    # confirm that height and width are positive
+    if height < 0 or width < 0:
+        notifications.show_error(
+            'Height and width of ROI have to be positive.',
+            )
+        return
     try:
         x1, y1 = [int(k) for k in ul_corner]
     except ValueError:
@@ -103,7 +109,7 @@ def norm_img(img: np.array, ret_type='float') -> np.array:
     Returns:
         np.array: normalized array to 1
     """
-    return img/np.amax(img) if ret_type == 'float'else (img/np.amax(img)).astype(ret_type)
+    return img/np.amax(img) if ret_type == 'float' else (img/np.amax(img)).astype(ret_type)
 
 
 def img_to_int_type(img: np.array, dtype: np.dtype = np.int_) -> np.array:
@@ -122,9 +128,9 @@ def img_to_int_type(img: np.array, dtype: np.dtype = np.int_) -> np.array:
     """
     # TODO: take care of 12 bit images, how to identify them in order
     # to normalize on 2**12-1 but witll on 16bit. Memory saving in practice
-    if dtype == np.int8:
+    if dtype == np.uint8:
         ans = np.clip(img, 0, 255).astype(dtype)
-    elif dtype == np.int16:
+    elif dtype == np.uint16:
         # 4095 would be better for our 12bit camera
         ans = np.clip(img, 0, 2**16 - 1).astype(dtype)
     else:
