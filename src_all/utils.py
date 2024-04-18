@@ -2,11 +2,10 @@
 
 import numpy as np
 import warnings
-from napari.utils import progress, notifications
-
 
 """
-Utility functions for the widget and for the Correct class
+Utility functions for stack operations
+- currently used for napari widget and in the Correct class
 TODO: perform timing on real data and consider threading.
 """
 
@@ -15,33 +14,42 @@ def select_roi(stack: np.ndarray,
                ul_corner: tuple, height: int,
                width: int) -> tuple[np.ndarray, tuple]:
     """
-    Select ROI relative to Upper Left (UL) corner point. If points
-    layer contains more than 1 point, the last point is considered.
+    Select Region of Interest (ROI) relative to the Upper Left (UL) corner point. If points
+    layer contains more than one point, the last point is considered.
 
     Args:
-        stack (np.ndarray): Stack of images, firs dim is stacking dim
-        ul_corner (tuple): tuple of x_coord, y_coord
-        height (int): ROI's height
-        width (int): ROI's width
+        stack (np.ndarray): Stack of images, first dimension is the stacking dimension
+        ul_corner (tuple): tuple of x_coord, y_coord representing the upper left corner of the ROI
+        height (int): Height of the ROI
+        width (int): Width of the ROI
 
     Raises:
-        ValueError: If l_corner is not a 2-tuple. Or if array is not 2D or 3D
+        ValueError: If ul_corner is not a 2-tuple,
+            or if the array is not 2D or 3D,
+            or if the height and width of the ROI are not positive,
+            or if the UL corner is not within the array.
 
     Returns:
-        tuple[np.ndarray, tuple]: ROIs image data, tuple of  from the stack
+        tuple[np.ndarray, tuple]: A tuple containing the ROI's image data from the stack and a tuple of the ROI's parameters (x1, x2, y1, y2)
     """
+
+    # TODO: the errors on the napari should handled on the widget level
     # confirm that height and width are positive
     if height < 0 or width < 0:
-        notifications.show_error(
-            'Height and width of ROI have to be positive.',
-            )
-        return
+        raise ValueError('Height and width of ROI have to be positive.')
+
     try:
         x1, y1 = [int(k) for k in ul_corner]
     except ValueError:
-        notifications.show_error(
-            'UL corner must be defined by tuple of (x_coord, y_coord).',
-            )
+        raise ValueError('UL corner must be defined by tuple of (x_coord, y_coord).')
+
+    # ensure that x1 and y1 are within the array
+    if x1 < 0 or y1 < 0:
+        raise ValueError('UL corner must be within the array.')
+
+    # ensure that array is 2D or 3D
+    if stack.ndim not in [2, 3]:
+        raise ValueError("Array dimension not supported")
 
     # ensure that limits of the arrays are respected
     x2 = min(x1 + height, stack.shape[-2])
@@ -52,9 +60,6 @@ def select_roi(stack: np.ndarray,
 
     elif stack.ndim == 3:
         roi = stack[:, x1: x2, y1: y2]
-    else:
-        # Handle other dimensions if needed
-        raise ValueError("Array dimension not supported")
 
     roi_pars = (x1, x2, y1, y2)
     return roi, roi_pars
@@ -65,6 +70,7 @@ def bin_3d(stack: np.ndarray, bin_factor: int) -> np.ndarray:
     """
     Bin stack of images applying mean on the binned pixels.
     First dim is the stacking one. Binning is along axis 1, 2.
+    If 
     Result is casted on integer.
 
     Args:
@@ -78,7 +84,7 @@ def bin_3d(stack: np.ndarray, bin_factor: int) -> np.ndarray:
     Returns:
         np.ndarray: Binned stack of images.
     """
-    if len(stack.shape) != 3:
+    if stack.ndim != 3:
         raise IndexError('Stack has to have three dimensions.')
 
     # array preallocation
@@ -87,10 +93,16 @@ def bin_3d(stack: np.ndarray, bin_factor: int) -> np.ndarray:
     ans = np.empty((stack.shape[0], height_dim, width_dim),
                    dtype=int,
                    )
-    # TODO: this throws error if reshape not exact, needs a fix.
-    for i in progress(range(stack.shape[0])):
+
+    # subarray of stack that equals height_dim * bin_factor
+    if height_dim * bin_factor != stack.shape[1] or width_dim * bin_factor != stack.shape[2]:
+        stack = stack[:, :height_dim * bin_factor, :width_dim * bin_factor]
+
+    # binning is done along axis 1 and 2, mean is applied
+    for i in range(stack.shape[0]):
         ans[i] = stack[i].reshape(height_dim, bin_factor,
                                   width_dim, bin_factor).mean(3).mean(1)
+
     return ans
 
 
