@@ -205,15 +205,12 @@ class Correct():
         # bright-field needs to be first corrected with
         # dark and hot pixels if possible
         try:
-            print('checkpoint 1',self.bright_corr)
             self.bright_corr = norm_img(self.bright_corr)
-            print('checkpoint 2', self.bright_corr)
         except:
             print('Probably bright is not yet dark/hot corrected, trying that')
             # TODO: ensure this is done only once. Should offer redoing it
             # from the raw image, if user tries to run this second time.
-            self.bright_corr = self.correct_dark(self.bright)
-            print('checkpoint 3', self.bright_corr)        
+            self.bright_corr = self.correct_dark(self.bright)      
             if self.hot is None:
                 pass
             else:
