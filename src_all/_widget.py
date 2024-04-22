@@ -312,13 +312,13 @@ def corrections(viewer: Viewer,
     # preallocate corrected array
     data_corr = np.zeros(original_stack.shape,
                          dtype=original_stack.dtype)
-    print(f'number of hot pixels: {len(corr.hot_pxs)}')
+    # print(f'number of hot pixels: {len(corr.hot_pxs)}')
 
     # dark-field
     if dark is not None:
         for i, img in progress(enumerate(original_stack)):
             data_corr[i] = corr.correct_dark(img)
-        print(f'{np.amax(data_corr)}, min: {np.amin(data_corr)}')
+            print(f'max: {np.amax(data_corr)}, min: {np.amin(data_corr)}')
         notifications.show_info('Dark correction done.')
 
     # bright-field

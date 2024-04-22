@@ -58,14 +58,6 @@ def layer_container_and_selection(viewer=None, layer_type = Image, container_nam
 
     return layer_selection_container, layer_select
 
-
-def update_properties_list(widget, exclude_list):
-    """
-    Updates the properties list of a given widget with the pr
-    """
-    pass
-
-
 class PreprocessingnWidget(QWidget):
     name = 'Preprocessor'
 
@@ -88,6 +80,7 @@ class PreprocessingnWidget(QWidget):
          self.image_layer_select) = layer_container_and_selection(viewer=self.viewer, 
                                                                   layer_type = Image, 
                                                                   container_name = 'Image to analyze')
+        
         (hot_image_selection_container, 
          self.hot_layer_select) = layer_container_and_selection(viewer=self.viewer, 
                                                                 layer_type = Image, 
@@ -182,8 +175,8 @@ class PreprocessingnWidget(QWidget):
         buttons_dict = {'Select ROI': self.select_ROIs,
                         'Binning': self.bin_stack,
                         'Hot pixel correction': self.correct_hot_pixels,
-                        'Dark-field correction': self.correct_dark,
-                        'Bright-field correction': self.correct_bright
+                        'Dark-field correction': self.dark_correction,
+                        'Bright-field correction': self.bright_correction
                         }
         for button_name, call_function in buttons_dict.items():
             button = QPushButton(button_name)
@@ -193,7 +186,7 @@ class PreprocessingnWidget(QWidget):
         layout.addWidget(self.messageBox, stretch=True)
         self.messageBox.setText('Messages') #not working, I think
              
-    def show_image(self, image_values, _inplace_value, fullname):
+    def show_image(self, image_values, _inplace_value, fullname, contrast):
         
         # if 'scale' in kwargs.keys():    #GT: do we need to scale?
         #     scale = kwargs['scale']
@@ -205,11 +198,11 @@ class PreprocessingnWidget(QWidget):
             self.viewer.layers[fullname].data = image_values
             # self.viewer.layers[fullname].scale = scale
         else:  
-            layer = self.viewer.add_image(image_values,
-                                            name = fullname,
-                                            # scale = scale,
-                                            interpolation2d = 'linear')
-        return layer
+            self.viewer.add_image(image_values,
+                                  name = fullname,
+                                  # scale = scale,
+                                  contrast_limits = contrast,
+                                  interpolation2d = 'linear')
     
     def set_preprocessing(self, *args):
         '''
@@ -230,34 +223,40 @@ class PreprocessingnWidget(QWidget):
     #select ROIs    
     def select_ROIs(self):
  
-        original_image = self.image_layer_select.value.data
+        original_image = self.image_layer_select.value
+        data = original_image.data
+        contrast_limits = original_image.contrast_limits
+        self.imageRaw_name = original_image.name
         points = self.points_layer_select.value.data
-        self.imageRaw_name = self.image_layer_select.value.name
         _inplace_value = self.inplace.val
         fullname = 'ROI_' + self.imageRaw_name
         notifications.show_info(f'UL corner coordinates: {points[0][1:].astype(int)}')
-        selected_roi, roi_pars = select_roi(original_image, points[-1], self.roi_height.val, self.roi_width.val)
-        self.show_image(selected_roi, _inplace_value, fullname)
+        selected_roi, roi_pars = select_roi(data, points[-1], self.roi_height.val, self.roi_width.val)
+        self.show_image(selected_roi, _inplace_value, fullname, contrast_limits)
 
     #binning
     def bin_stack(self):
         if self.bin_factor != 1:
-            original_image = self.image_layer_select.value.data
-            self.imageRaw_name = self.image_layer_select.value.name
+            original_image = self.image_layer_select.value
+            data = original_image.data
+            contrast_limits = original_image.contrast_limits
+            self.imageRaw_name = original_image.name
             _inplace_value = self.inplace.val
             fullname = 'binned_' + self.imageRaw_name 
-            binned_roi = bin_3d(original_image, self.bin_factor.val)
-            notifications.show_info(f'Original shape: {original_image.shape}, binned shape: {binned_roi.shape}')
-            self.show_image(binned_roi, _inplace_value, fullname)
+            binned_roi = bin_3d(data, self.bin_factor.val)
+            notifications.show_info(f'Original shape: {data.shape}, binned shape: {binned_roi.shape}')
+            self.show_image(binned_roi, _inplace_value, fullname, contrast_limits)
         else:
             notifications.show_info('Bin factor is 1, nothing to do.')
     
     #hot pixels correction (NOT WORKING YET)
     def correct_hot_pixels(self):
  
-        original_image = self.image_layer_select.value.data
+        original_image = self.image_layer_select.value
+        data = original_image.data
+        contrast_limits = original_image.contrast_limits
+        self.imageRaw_name = original_image.name
         hot_pixels_image = self.hot_layer_select.value.data
-        self.imageRaw_name = self.image_layer_select.value.name
         _inplace_value = self.inplace.val
         _std_cutoff = self.std_cutoff.val
         fullname = 'Hot correction' + self.imageRaw_name
@@ -265,8 +264,8 @@ class PreprocessingnWidget(QWidget):
         # init correction class
         corr = Correct(hot=hot_pixels_image, std_mult=_std_cutoff, dark=None, bright=None)
         # preallocate corrected array
-        data_corr = np.zeros(original_image.shape,
-                              dtype=original_image.dtype)
+        data_corr = np.zeros(data.shape,
+                              dtype=data.dtype)
         print(f'number of hot pixels: {len(corr.hot_pxs)}')
 
         # Bad pixels
@@ -284,50 +283,54 @@ class PreprocessingnWidget(QWidget):
         # print('debug corrections', history.roi_def)
         
         # self.show_image(selected_roi, _inplace_value, fullname)
-        self.show_image(data_corr, _inplace_value, fullname)
+        self.show_image(data_corr, _inplace_value, fullname, contrast_limits)
         
-    #dark-field correction  (WORKS CORRECTLY WITH INPLACE BUT NOT WITH NOINPLACE)
-    def correct_dark(self):
+    #dark-field correction
+    def dark_correction(self):
  
-        original_image = self.image_layer_select.value.data
-        dark_image = self.dark_layer_select.value.data
-        self.imageRaw_name = self.image_layer_select.value.name
+        original_image = self.image_layer_select.value
+        data = original_image.data
+        contrast_limits = original_image.contrast_limits
+        self.imageRaw_name = original_image.name
+        dark_image = self.dark_layer_select.value
         _inplace_value = self.inplace.val
         fullname = 'dark_correction _' + self.imageRaw_name
         
         # init correction class
         corr = Correct(hot=None, std_mult=None, dark=dark_image, bright=None)
         # preallocate corrected array
-        data_corr = np.zeros(original_image.shape,
-                             dtype=original_image.dtype)
+        data_corr = np.zeros(data.shape,
+                             dtype=data.dtype)
 
-        for i, img in progress(enumerate(original_image)):
+        for i, img in progress(enumerate(data)):
             data_corr[i] = corr.correct_dark(img)
-        print(f'max: {np.amax(data_corr)}, min: {np.amin(data_corr)}')
+            print(f'max: {np.amax(data_corr)}, min: {np.amin(data_corr)}')
         notifications.show_info('Dark correction done.')
         
-        self.show_image(data_corr, _inplace_value, fullname)
+        self.show_image(data_corr, _inplace_value, fullname, contrast_limits)
+        
+        self.data_corr = data_corr
         
     #bright-field correction
-    def correct_bright(self):
- 
-        original_image = self.image_layer_select.value.data
-        bright_image = self.bright_layer_select.value.data
-        self.imageRaw_name = self.image_layer_select.value.name
+    def bright_correction(self):
+        
+        original_image = self.image_layer_select.value
+        contrast_limits = original_image.contrast_limits
+        self.imageRaw_name = original_image.name
+        bright_image = self.bright_layer_select.value
+        dark_image = self.dark_layer_select.value
+        data_corr= self.data_corr
         _inplace_value = self.inplace.val
         fullname = 'bright_correction_' + self.imageRaw_name
         
         # init correction class
-        corr = Correct(hot=None, std_mult=None, dark=None, bright=bright_image)
-        # preallocate corrected array
-        data_corr = np.zeros(original_image.shape,
-                             dtype=original_image.dtype)
+        corr = Correct(hot=None, std_mult=None, dark=dark_image, bright=bright_image)
 
         for i, img in progress(enumerate(data_corr)):
             data_corr[i] = corr.correct_bright(img)
         notifications.show_info('Bright correction done.')
         
-        self.show_image(data_corr, _inplace_value, fullname)
+        self.show_image(data_corr, _inplace_value, fullname, contrast_limits)
 
 if __name__ == '__main__':
     import napari
