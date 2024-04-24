@@ -68,36 +68,60 @@ class Correct():
         self.bright_corr = None
 
         if hot is not None:
-            self.hot_pxs = self.get_hot_pxs()
+            print('Change, get_bad_pixels is a new name',
+                  'needs to be called but allows to identify.',
+                  'dead pixels for FL hot pixels for TR')
 
-    def get_hot_pxs(self) -> list[tuple[int, int]]:
+            # self.hot_pxs = self.get_hot_pxs()
+
+    def get_bad_pxs(self, mode: str = 'hot') -> list[tuple[int, int]]:
         """
         Identify hot pixels from the hot array based on the hot
         std_mutl facter threshold. Hot pixel has intensity greater than
 
         mean(img) + std_mult * std(img)
+        Args:
+            mode (str, optional): Mode of the hot pixel identification.
+                Defaults to 'hot'. Options are 'hot', 'dead' and 'both'.
         """
+        hot_pxs, dead_pxs = [], []
         self.mean = np.mean(self.hot, dtype=np.float64)
         self.std = np.std(self.hot, dtype=np.float64)
 
-        self.mask = np.ma.masked_greater(
-                        self.hot,
-                        self.mean + self.std_mult * self.std,
-                        )
+        if mode == 'hot' or mode == 'both':
+            self.maskAbove = np.ma.masked_greater(
+                            self.hot,
+                            self.mean + self.std_mult * self.std,
+                            )
 
-        hot_pxs = []
+            # if mask did not get any hot pixels, return empty list
+            if np.all(self.maskAbove.mask is False):
+                print('No hot pixels identified')
+            else:
+                # otherwise iterate over the mask and append hot pixels to the list
+                for row, col in zip(*np.where(self.maskAbove.mask)):
+                    hot_pxs.append((row, col))
 
-        # if mask did not get any hot pixels, return empty list
-        if np.all(self.mask.mask is False):
-            print('No hot pixels identified')
-            return hot_pxs
+        elif mode == 'dead' or mode == 'both':
+            self.maskBelow = np.ma.masked_less(
+                            self.hot,
+                            self.mean - self.std_mult * self.std,
+                            )
 
-        # otherwise iterate over the mask and append hot pixels to the list
-        for row, col in zip(*np.where(self.mask.mask)):
-            hot_pxs.append((row, col))
-        return hot_pxs
+            # if mask did not get any dead pixels, return empty list
+            if np.all(self.maskBelow.mask is False):
+                print('No dead pixels identified')
+            else:
+                # otherwise iterate over the mask and append dead pixels to the list
+                for row, col in zip(*np.where(self.maskBelow.mask)):
+                    dead_pxs.append((row, col))
+        else:
+            raise ValueError('Unknown mode option, valid is hot, dead and both.')
+        self.hot_pxs = hot_pxs
+        self.dead_pxs = dead_pxs
+        return hot_pxs, dead_pxs
 
-    def correct_hot(self, img: np.array, mode: str = 'n4') -> np.array:
+    def correctBadPxs(self, img: np.array, mode: str = 'n4') -> np.array:
         """Correct hot pixels from its neighbour pixel values. It ignores the
         neighbour pixel if it was identified as hot pixel itself.
 
@@ -115,11 +139,9 @@ class Correct():
         Returns:
             np.array: Corrected img array
         """
-        if self.hot_pxs is None:
-            raise RuntimeError(
-                'You must have hot pixel acquisition and run get_hot_pxs()')
+        self.badPxs = set(self.hot_pxs + self.dead_pxs)
 
-        if self.hot_pxs == []:
+        if self.badPxs == []:
             print('No hot pixels identified, nothing to correct')
             return img
 
@@ -141,10 +163,10 @@ class Correct():
         ans = img.copy()
 
         # loop over identified hot pixels and correct
-        for hot_px in self.hot_pxs:
+        for badPx in self.badPxs:
             neigh_vals = []
             for neigh in neighs:
-                px = np.add(np.array(hot_px), np.array(neigh))
+                px = np.add(np.array(badPx), np.array(neigh))
                 # I can do this because I checked shapes above
                 # check if neighbour is out of the image ranges.
                 if 0 > px[0] or px[0] >= img.shape[0] or 0 > px[1] or px[1] >= img.shape[1]:
@@ -157,7 +179,7 @@ class Correct():
                 neigh_vals.append(img[px[0], px[1]])
 
             # replace hot pixel with the mean of the neighbours
-            ans[hot_px] = int(np.mean(neigh_vals))
+            ans[badPx] = int(np.mean(neigh_vals))
 
         # test for negative values
         is_positive(ans, 'Bad-pixel')
@@ -246,8 +268,8 @@ class Correct():
         Args:
             img_stack (np.array): 3D array of images, third dimension is
                 along angles
-            mode (str, optional): correction mode, only available is integral.
-                Defaults to 'integral'.
+            mode (str, optional): correction mode, only available is integral
+                and integral_bottom. Defaults to 'integral'.
             use_bright (bool, optional): if bright field acquisition is a ref
                 to scale images. Defaults to True.
             rect_dim (int, optional): size of rectabgles in the corners in
@@ -265,6 +287,7 @@ class Correct():
         # second idea, fit a correction plane into the four corners.
         if use_bright is True and self.bright is not None:
             # four corners of the bright
+            # this is useless option!!!
             ref = ((self.bright[:rect_dim, :rect_dim]),
                    (self.bright[:rect_dim, -rect_dim:]),
                    (self.bright[-rect_dim:, :rect_dim]),
