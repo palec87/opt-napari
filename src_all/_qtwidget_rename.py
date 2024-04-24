@@ -191,46 +191,6 @@ class PreprocessingnWidget(QWidget):
                         '-Log_' + original_image.name,
                         )
 
-    # def dark_correction(self):
-    #     original_image = self.image_layer_select.value
-    #     data = original_image.data
-    #     dark_image = self.dark_layer_select.value
-
-    #     # init correction class
-    #     corr = Correct(hot=None, std_mult=None, dark=dark_image, bright=None)
-    #     # preallocate corrected array
-    #     data_corr = np.zeros(data.shape,
-    #                          dtype=data.dtype)
-
-    #     for i, img in progress(enumerate(data)):
-    #         data_corr[i] = corr.correct_dark(img)
-    #         print(f'max: {np.amax(data_corr)}, min: {np.amin(data_corr)}')
-    #     notifications.show_info('Dark correction done.')
-
-    #     self.show_image(data_corr,
-    #                     'dark_correction _' + original_image.name,
-    #                     original_image.contrast_limits)
-
-    #     self.data_corr = data_corr
-
-    # # bright-field correction
-    # def bright_correction(self):
-    #     original_image = self.image_layer_select.value
-    #     bright_image = self.bright_layer_select.value
-    #     dark_image = self.dark_layer_select.value
-    #     data_corr = self.data_corr
-
-    #     # init correction class
-    #     corr = Correct(hot=None, std_mult=None, dark=dark_image, bright=bright_image)
-
-    #     for i, img in progress(enumerate(data_corr)):
-    #         data_corr[i] = corr.correct_bright(img)
-    #     notifications.show_info('Bright correction done.')
-
-    #     self.show_image(data_corr,
-    #                     'bright_correction_' + original_image.name,
-    #                     original_image.contrast_limits)
-
     ##################
     # Helper methods #
     ##################
