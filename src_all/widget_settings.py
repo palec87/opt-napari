@@ -123,9 +123,9 @@ class Settings():
             change_func.connect(self.write_function)
         settingLayout = QFormLayout()
         settingLayout.setFormAlignment(Qt.AlignLeft)
-        lab = QLabel(name)
-        lab.setWordWrap(False)
-        settingLayout.addRow(sbox, lab)
+        self.lab = QLabel(name)
+        self.lab.setWordWrap(False)
+        settingLayout.addRow(sbox, self.lab)
         layout.addLayout(settingLayout)
         self.sbox = sbox
 
