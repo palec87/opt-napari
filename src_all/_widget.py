@@ -96,7 +96,7 @@ class Backtrack:
             self.update_roi_pars(data_dict['roi_def'])
         except:
             pass
-        print('debug update history', history.roi_def)
+        # print('debug update history', history.roi_def)
         return data_dict['data']
 
     # DP, this should be checked upon Qt widget values
@@ -148,7 +148,7 @@ class Backtrack:
         # resetting history dictionary, because only 1 operation can be tracked
         data = self.history_item.pop('data')
         self.history_item = dict()
-        print('debug undo', history.roi_def)
+        # print('debug undo', history.roi_def)
         return data
 
     def revert_to_raw(self):
