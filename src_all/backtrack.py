@@ -23,7 +23,6 @@ class Backtrack:
     roi_def: tuple = ()     # indices refer always to raw data
     history_item = dict()   # operation, data, roi_def, bin_factor
 
-    # DP: The flags will be moved to the widget I think
     inplace: bool = True
     track: bool = False
 
@@ -53,7 +52,7 @@ class Backtrack:
             AttributeError: In case unknown operation passed
 
         Returns:
-            np.ndarray: new image, which is from the Image
+            np.ndarray: to be displayed in viewer.Image layer.
         """
         # for the first operation, store original as raw data
         if self.raw_data is None:
@@ -64,29 +63,42 @@ class Backtrack:
             return data_dict['data']
 
         # DP: not that necessary check, can be removed I think
-        if data_dict['operation'] not in ['roi', 'bin', 'correct']:
+        if data_dict['operation'] not in [
+            'roi', 'bin', 'corrInt', 'corrBP', 'corrDB', 'log',
+             ]:
             raise AttributeError('Unknown operation to update history.')
 
         # compatible with update, I put old data to history item
-        # and update current parameters in 
+        # and update current parameters in
         self.history_item['operation'] = data_dict['operation']
         self.history_item['data'] = image.data
-        # for binning operation
-        # TODO: this is not elegant at all
-        try:
+        # for ROI selection
+        if self.history_item['operation'] == 'roi':
             self.history_item['roi_def'] = self.roi_def
             self.update_roi_pars(data_dict['roi_def'])
-        except:
-            pass
 
-        # binning operation
-        try:
+        # for binning operation
+        elif self.history_item['operation'] == 'bin':
             self.history_item['bin_factor'] = data_dict['bin_factor']
             # I need to update the roi pars too.
-            self.update_roi_pars(data_dict['roi_def'])
-        except:
+            # Not sure about this now
+            # self.update_roi_pars(data_dict['roi_def'])
+
+        # for intensity correction
+        elif self.history_item['operation'] == 'corrInt':
+            self.history_item['rect_dim'] = data_dict['rect_dim']
+
+        # for bad pixel correction
+        elif self.history_item['operation'] == 'corrBP':
+            self.history_item['mode'] = data_dict['mode']
+            self.history_item['hot_pxs'] = data_dict['hot_pxs']
+            self.history_item['dead_pxs'] = data_dict['dead_pxs']
+
+        # for log and dark/bright operation nothing to do
+        else:
             pass
-        # print('debug update history', history.roi_def)
+
+        # return new image data
         return data_dict['data']
 
     # DP, this should be checked upon Qt widget values
@@ -118,6 +130,7 @@ class Backtrack:
         if self.history_item == dict():
             raise ValueError('No State to revert to.')
 
+        # this is completely useles I think
         if self.history_item['operation'] == 'roi':
             notifications.show_info('Reverting ROI selection')
             self.roi_def = self.history_item['roi_def']
@@ -128,9 +141,23 @@ class Backtrack:
             # but not for dark and bright field. Could be fixed, or need to be imposed or at least
             # raised as warnings
             notifications.show_info('Reverting binning.')
+            self.bin_factor = self.history_item['bin_factor']
 
-        elif self.history_item['operation'] == 'correct':
-            notifications.show_info('Reverting corrections.')
+        elif self.history_item['operation'] == 'corrInt':
+            notifications.show_info('Reverting intensity correction.')
+            self.rect_dim = self.history_item['rect_dim']
+
+        elif self.history_item['operation'] == 'corrBP':
+            notifications.show_info('Reverting Bad Pixel correction.')
+            self.mode = self.history_item['mode']
+            self.hot_pxs = self.history_item['hot_pxs']
+            self.dead_pxs = self.history_item['dead_pxs']
+
+        elif self.history_item['operation'] == 'log':
+            notifications.show_info('Reverting log.')
+
+        elif self.history_item['operation'] == 'corrDB':
+            notifications.show_info('Reverting dark/bright correction.')
 
         else:
             raise ValueError('Unsupported operation')
@@ -138,13 +165,13 @@ class Backtrack:
         # resetting history dictionary, because only 1 operation can be tracked
         data = self.history_item.pop('data')
         self.history_item = dict()
-        # print('debug undo', history.roi_def)
         return data
 
     def revert_to_raw(self):
         self.history_item = dict()
         return self.raw_data
 
+    # TODO: Do I really need this since I do always only one undo?
     def update_roi_pars(self, roi_pars):
         print('updating roi_params, should run only once.')
         if self.roi_def == ():
