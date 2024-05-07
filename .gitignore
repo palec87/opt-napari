@@ -155,7 +155,7 @@ cython_debug/
 napari-correctDark/
 napari-fbpCPU/
 napari-selectROI/
-first_widget.py
+sandbox/
 
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
