@@ -87,6 +87,7 @@ class Correct():
         hot_pxs, dead_pxs = [], []
         self.mean = np.mean(self.hot, dtype=np.float64)
         self.std = np.std(self.hot, dtype=np.float64)
+        print('Hot image stats', mode, self.mean, self.std)
 
         if mode == 'hot' or mode == 'both':
             self.maskAbove = np.ma.masked_greater(
@@ -102,7 +103,7 @@ class Correct():
                 for row, col in zip(*np.where(self.maskAbove.mask)):
                     hot_pxs.append((row, col))
 
-        elif mode == 'dead' or mode == 'both':
+        if mode == 'dead' or mode == 'both':
             self.maskBelow = np.ma.masked_less(
                             self.hot,
                             self.mean - self.std_mult * self.std,
@@ -115,8 +116,6 @@ class Correct():
                 # otherwise iterate over the mask and append dead pixels to the list
                 for row, col in zip(*np.where(self.maskBelow.mask)):
                     dead_pxs.append((row, col))
-        else:
-            raise ValueError('Unknown mode option, valid is hot, dead and both.')
         self.hot_pxs = hot_pxs
         self.dead_pxs = dead_pxs
         return hot_pxs, dead_pxs
@@ -282,6 +281,9 @@ class Correct():
             np.ndarray: 3D array of the same shape as the img_stack,
                 but intensity corrected
         """
+        # check if stack is 3D array
+        if img_stack.ndim != 3:
+            raise IndexError('Stack has to have three dimensions.')
         # do I want to correct in respect to the bright field
         # basic idea is four corners, integrated
         # second idea, fit a correction plane into the four corners.
@@ -320,7 +322,7 @@ class Correct():
         corr_stack = np.empty(img_stack.shape, dtype=img_stack.dtype)
 
         # intensity numbers for img in the stack (sum over ROIs)
-        stack_int = []
+        intOrig, intCorr = [], []
         for i, img in enumerate(img_stack):
             # two means are not a clean solution
             # as long as the rectangles ar the same, it is equivalent
@@ -329,18 +331,27 @@ class Correct():
                                 np.mean(img[:rect_dim, -rect_dim:]),
                                 np.mean(img[-rect_dim:, :rect_dim]),
                                 np.mean(img[-rect_dim:, -rect_dim:]),
-                ))
+                                ))
             elif mode == 'integral_bottom':
                 img_int = np.mean((
                                 np.mean(img[-rect_dim:, :rect_dim]),
                                 np.mean(img[-rect_dim:, -rect_dim:]),
                 ))
-            stack_int.append(img_int)
+            intOrig.append(img_int)
             corr_stack[i] = (img / img_int) * self.ref
+
+            # intensity after correction
+            intCorr.append(np.mean((np.mean(corr_stack[i][:rect_dim, :rect_dim]),
+                                    np.mean(corr_stack[i][:rect_dim, -rect_dim:]),
+                                    np.mean(corr_stack[i][-rect_dim:, :rect_dim]),
+                                    np.mean(corr_stack[i][-rect_dim:, -rect_dim:]),
+                                    ))
+                           )
             print(i, end='\r')
 
         # stored in order to tract the stability fluctuations.
-        self.stack_int = np.array(stack_int)
+        intOrig = np.array(intOrig)
+        intCorr = np.array(intCorr)
 
         # test for negative values
         is_positive(corr_stack, 'Intensity')
@@ -349,7 +360,16 @@ class Correct():
         if cast_to_int:
             corr_stack = img_to_int_type(corr_stack, dtype=corr_stack.dtype)
 
-        return corr_stack
+        # int correction dictioanary report
+        intCorrReport = {'mode': mode,
+                         'use_bright': use_bright,
+                         'rect_dim': rect_dim,
+                         'ref': self.ref,
+                         'stack_orig_int': intOrig,
+                         'stack_corr_int': intCorr,
+                         }
+
+        return corr_stack, intCorrReport
 
     # This method not used in the napari plugin
     def correct_all(self, img: np.array, mode_hot='n4') -> np.array:
