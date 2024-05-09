@@ -39,7 +39,8 @@ def select_roi(stack: np.ndarray,
         raise ValueError('Height and width of ROI have to be positive.')
 
     try:
-        x1, y1 = [int(k) for k in ul_corner]
+        # x, y assumed to be the last two elements of the tuple
+        x1, y1 = [int(k) for k in ul_corner[-2:]]
     except ValueError:
         raise ValueError('UL corner must be defined by tuple of (x_coord, y_coord).')
 
