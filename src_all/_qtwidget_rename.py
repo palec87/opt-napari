@@ -10,6 +10,13 @@ from qtpy.QtWidgets import (
     QWidget, QPushButton, QLineEdit,
     QRadioButton, QLabel,
     QButtonGroup, QGroupBox,
+    QMessageBox, QDialog, QSizePolicy,
+)
+
+import matplotlib as mpl
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_qt5agg import (
+    FigureCanvasQTAgg as FigureCanvas
 )
 
 from widget_settings import Settings
@@ -19,6 +26,8 @@ from utils import (
     select_roi,
     bin_3d,
 )
+
+# TODO: Correct() as a class attribute? Right now it is created in each method
 
 DEBUG = True
 badPxDict = {
@@ -59,11 +68,11 @@ class PreprocessingnWidget(QWidget):
     def __init__(self, viewer: napari.Viewer):
         super().__init__()
         self.viewer = viewer
-        self.corr = None
         self.history = Backtrack()
         self.setup_ui()
 
-        # UI initializes track and inplace values, here I update history instance
+        # setup_ui initializes track and inplace values
+        # here I update history instance flags
         self.updateHistoryFlags()
 
     def correctDarkBright(self):
@@ -74,16 +83,17 @@ class PreprocessingnWidget(QWidget):
 
         original_image = self.image_layer_select.value
         data_corr = np.zeros(original_image.data.shape,
-                                  dtype=original_image.data.dtype)
+                            #  dtype=original_image.data.dtype, # I do not like not keeping the dtyp the same, but float operations do not work otherwise
+                             )
 
-        self.corr = Correct(dark=self.dark_layer_select.value.data,
-                            bright=self.bright_layer_select.value.data,
-                            )
+        corr = Correct(dark=self.dark_layer_select.value.data,
+                       bright=self.bright_layer_select.value.data,
+                       )
         if self.flagBright.val:
             if self.flagDark.val and self.flagExp == 'Transmission':
                 for i, img in progress(enumerate(original_image.data)):
-                    data_corr[i] = ((img - self.corr.dark) /
-                                    (self.corr.bright - self.corr.dark))
+                    data_corr[i] = ((img - corr.dark) /
+                                    (corr.bright - corr.dark)).astype(np.float32)
                 # because it is float between 0-1, needs to be rescaled and casted to uint16
                 # check if the image has element greater than 1 or less than 0
                 if np.amax(data_corr) > 1 or np.amin(data_corr) < 0:
@@ -94,10 +104,10 @@ class PreprocessingnWidget(QWidget):
             elif self.flagExp == 'Emission':
                 # this is integer, no casting needed
                 for i, img in progress(enumerate(original_image.data)):
-                    data_corr[i] = img - self.corr.bright
+                    data_corr[i] = img - corr.bright
             else:  # transmission, no dark correction
                 for i, img in progress(enumerate(original_image.data)):
-                    data_corr[i] = img / self.corr.bright
+                    data_corr[i] = img / corr.bright
 
                 # because it is float between 0-1, needs to be rescaled and casted to uint16
                 # make sure that the image is between 0-1 first
@@ -110,7 +120,7 @@ class PreprocessingnWidget(QWidget):
         elif self.flagDark.val:  # only dark correction
             # this is integer, no casting needed
             for i, img in progress(enumerate(original_image.data)):
-                data_corr[i] = img - self.corr.dark
+                data_corr[i] = img - corr.dark
         else:
             self.messageBox.setText(
                 'No correction selected.',
@@ -148,17 +158,41 @@ class PreprocessingnWidget(QWidget):
         self.messageBox.setText('Correcting hot pixels.')
         corr = Correct(hot=self.hot_layer_select.value.data,
                        std_mult=self.std_cutoff.val)
-        hotPxs, deadPxs = self.corr.get_bad_pxs(mode=self.flagBad)
+        hotPxs, deadPxs = corr.get_bad_pxs(mode=self.flagBad)
 
         self.messageBox.setText(f'Number of hot pixels: {len(hotPxs)}')
         self.messageBox.setText(f'Number of dead pixels: {len(deadPxs)}')
 
-        # Here should raise a yes/no dialog to ask if the user wants to correct the hot pixels
-        # if yes, then the correction is done, if not, the hot pixels are displayed
+        dlg = QMessageBox(self)
+        dlg.setWindowTitle("Bad Pixel correction")
+        dlg.setText("Do you want to correct all those pixels! \n"
+                    "It can take a while. \n"
+                    f"{len(hotPxs)} + {len(deadPxs)}")
+        dlg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        button = dlg.exec()
+
+        # yes/no dialog to ask if the user wants to correct the hot pixels
+        if button == QMessageBox.No:
+            # display bad pixels
+            data_corr = np.zeros(self.hot_layer_select.value.data.shape,
+                                 dtype=original_image.data.dtype)
+            # hot pixels and dead pixels are displayed as 100
+            for _i, (y, x) in enumerate(hotPxs):
+                data_corr[y, x] = 100
+            for _i, (y, x) in enumerate(deadPxs):
+                data_corr[y, x] = 101
+            self.show_image(data_corr,
+                            'Bad_pixels_' + self.hot_layer_select.value.name,
+                            # self.hot_layer_select.value.contrast_limits,
+                            )
+            return
+
+        # Correction is done, TODO: ooptimized for the volumes and threaded
         data_corr = np.zeros(original_image.data.shape,
-                                dtype=original_image.data.dtype)
+                             dtype=original_image.data.dtype)
         for i, img in progress(enumerate(original_image.data)):
             data_corr[i] = corr.correctBadPxs(img)
+            print(i)
 
         # history update
         if self.history.inplace:
@@ -171,7 +205,7 @@ class PreprocessingnWidget(QWidget):
             data_corr = self.history.update_history(original_image, new_data)
 
         self.show_image(data_corr,
-                        'Hot correction' + original_image.name,
+                        'Bad_correction_' + original_image.name,
                         original_image.contrast_limits)
 
     def correctIntensity(self):
@@ -183,8 +217,7 @@ class PreprocessingnWidget(QWidget):
         also updates the history of the image.
         """
         self.messageBox.setText('Correcting intensity.')
-        if self.corr is None:
-            self.corr = Correct(bright=self.bright_layer_select.value.data)
+        corr = Correct(bright=self.bright_layer_select.value.data)
 
         # data to correct
         original_image = self.image_layer_select.value
@@ -192,8 +225,16 @@ class PreprocessingnWidget(QWidget):
                              dtype=original_image.data.dtype)
 
         # intensity correction
-        data_corr = self.corr.correct_int(original_image, use_bright=False,
-                                          rect_dim=self.rectSize.val)
+        # TODO: use_bright should be a setting, not urgent
+        data_corr, corr_dict = corr.correct_int(
+                                    original_image.data,
+                                    use_bright=False,
+                                    rect_dim=self.rectSize.val)
+
+        # TODO: open widget with a intensity plots
+        self.plotDialog = PlotDialog(self, corr_dict)
+        self.plotDialog.resize(800, 400)
+        self.plotDialog.show()
 
         # history update
         if self.history.inplace:
@@ -219,7 +260,11 @@ class PreprocessingnWidget(QWidget):
         it updates the history with the ROI operation.
         """
         original_image = self.image_layer_select.value
-        points = self.points_layer_select.value.data
+        try:
+            points = self.points_layer_select.value.data
+        except AttributeError:
+            self.messageBox.setText('No points layer selected.')
+            return
         self.messageBox.setText(
             f'UL corner coordinates: {points[0][1:].astype(int)}')
 
@@ -305,6 +350,9 @@ class PreprocessingnWidget(QWidget):
         """
         last_op = self.history.history_item['operation']
         self.image_layer_select.value.data = self.history.undo()
+
+        # reset contrast limits
+        self.image_layer_select.value.reset_contrast_limits()
         self.messageBox.setText(f'Undoing {last_op}')
 
     ##################
@@ -325,6 +373,11 @@ class PreprocessingnWidget(QWidget):
         if self.inplace.val:
             fullname = self.image_layer_select.value.name
             self.viewer.layers[fullname].data = image_values
+            if contrast is not None:
+                self.viewer.layers[fullname].contrast_limits = contrast
+            else:
+                self.viewer.layers[fullname].reset_contrast_limits()
+
         else:
             self.viewer.add_image(image_values,
                                   name=fullname,
@@ -409,18 +462,22 @@ class PreprocessingnWidget(QWidget):
         groupbox = QGroupBox('Global settings')
         box = QVBoxLayout()
         groupbox.setLayout(box)
+
+        # layout for radio buttons
+        boxSetting = QHBoxLayout()
         self.inplace = Settings('Inplace operations',
                                 dtype=bool,
                                 initial=True,
-                                layout=box,
+                                layout=boxSetting,
                                 write_function=self.set_preprocessing)
 
         self.track = Settings('Track',
                               dtype=bool,
                               initial=False,
-                              layout=box,
+                              layout=boxSetting,
                               write_function=self.set_preprocessing)
 
+        box.addLayout(boxSetting)
         # undo button
         self.undoBtn = QPushButton('Undo')
         self.undoBtn.clicked.connect(self.undoHistory)
@@ -465,8 +522,9 @@ class PreprocessingnWidget(QWidget):
 
         # Linear structure to impose correct order
         groupbox1 = QGroupBox('Dark/Bright Correction')
-        box1 = QVBoxLayout()
-        groupbox1.setLayout(box1)
+        boxAll = QVBoxLayout()
+        boxExp = QHBoxLayout()
+        groupbox1.setLayout(boxAll)
 
         # create QradioButtons
         groupExpMode = QButtonGroup(self)
@@ -475,28 +533,31 @@ class PreprocessingnWidget(QWidget):
         transExp = QRadioButton('Transmission')
         transExp.setChecked(True)
         groupExpMode.addButton(transExp)
-        box1.addWidget(transExp)
+        boxExp.addWidget(transExp)
 
         emlExp = QRadioButton('Emmision')
         groupExpMode.addButton(emlExp)
-        box1.addWidget(emlExp)
+        boxExp.addWidget(emlExp)
+        boxAll.addLayout(boxExp)
 
         # update flag
         self.updateExperimentMode(groupExpMode.checkedButton())
 
+        boxInclude = QHBoxLayout()
         # checkboxes
         self.flagDark = Settings('Include Dark',
                                  dtype=bool,
                                  initial=False,
-                                 layout=box1,
+                                 layout=boxInclude,
                                  write_function=self.set_preprocessing)
         self.flagBright = Settings('Include Bright',
                                    dtype=bool,
                                    initial=False,
-                                   layout=box1,
+                                   layout=boxInclude,
                                    write_function=self.set_preprocessing)
+        boxAll.addLayout(boxInclude)
         # Now comes button
-        self.addButton(box1, 'Correct Dark+Bringht', self.correctDarkBright)
+        self.addButton(boxAll, 'Correct Dark+Bringht', self.correctDarkBright)
         slayout.addWidget(groupbox1)
 
         # create a groupbox for hot pixel correction
@@ -597,6 +658,71 @@ class PreprocessingnWidget(QWidget):
         layout.addWidget(button)
 
 
+class PlotDialog(QDialog):
+    """
+    Create a pop-up widget with the OPT time execution
+    statistical plots. Timings are collected during the last run
+    OPT scan. The plots show the relevant statistics spent
+    on particular tasks during the overall experiment,
+    as well as per OPT step.
+    """
+    def __init__(self, parent, report: dict) -> None:
+        super(PlotDialog, self).__init__(parent)
+        self.mainWidget = QWidget()
+        layout = QVBoxLayout(self.mainWidget)
+        canvas = IntCorrCanvas(report, self.mainWidget, width=300, height=300)
+        layout.addWidget(canvas)
+        self.setLayout(layout)
+
+
+class IntCorrCanvas(FigureCanvas):
+    def __init__(self, data_dict, parent=None, width=300, height=300):
+        """ Plot of the report
+
+        Args:
+            corr_dict (dict): report data dictionary
+            parent (_type_, optional): parent class. Defaults to None.
+            width (int, optional): width of the plot in pixels.
+                Defaults to 300.
+            height (int, optional): height of the plot in pixels.
+                Defaults to 300.
+        """
+        fig = Figure(figsize=(width, height))
+        self.ax1 = fig.add_subplot()
+        # self.ax2 = fig.add_subplot(132)
+        # self.ax3 = fig.add_subplot(133)
+
+        self.createFigure(data_dict)
+
+        FigureCanvas.__init__(self, fig)
+        self.setParent(parent)
+
+        FigureCanvas.setSizePolicy(self,
+                                   QSizePolicy.Expanding,
+                                   QSizePolicy.Expanding)
+        FigureCanvas.updateGeometry(self)
+
+    def createFigure(self, data_dict: dict) -> None:
+        """Create report plot.
+
+        Args:
+            data_dict (dict): Intensity correction dictionary.
+        """
+        my_cmap = mpl.colormaps.get_cmap("viridis")
+        colors = my_cmap(np.linspace(0, 1, 2))
+        self.ax1.plot(data_dict['stack_orig_int'],
+                      label='Original',
+                      color=colors[0])
+
+        self.ax1.plot(data_dict['stack_corr_int'],
+                      label='Corrected',
+                      color=colors[1])
+
+        self.ax1.set_xlabel('OPT step number')
+        self.ax1.set_ylabel('Intensity')
+        self.ax1.legend()
+
+
 if __name__ == '__main__':
     import napari
 
@@ -615,4 +741,9 @@ if __name__ == '__main__':
         viewer.open(glob.glob('src_all/sample_data/16*'),
                     stack=True,
                     name='OPT data')
+        # set image layer to OPT data
+        optWidget.image_layer_select.value = viewer.layers['OPT data']
+        optWidget.hot_layer_select.value = viewer.layers['hot']
+        optWidget.dark_layer_select.value = viewer.layers['dark']
+        optWidget.bright_layer_select.value = viewer.layers['bright']
     napari.run()
