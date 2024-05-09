@@ -136,7 +136,7 @@ class PreprocessingnWidget(QWidget):
                                                     new_data)
 
         self.show_image(data_corr,
-                        'Intensity correction' + original_image.name,
+                        'Dark-Bright-corr_' + original_image.name,
                         original_image.contrast_limits)
 
     # hot pixels correction (NOT WORKING YET)
@@ -205,7 +205,7 @@ class PreprocessingnWidget(QWidget):
             data_corr = self.history.update_history(original_image, new_data)
 
         self.show_image(data_corr,
-                        'Bad_correction_' + original_image.name,
+                        'Bad-px-corr_' + original_image.name,
                         original_image.contrast_limits)
 
     def correctIntensity(self):
@@ -245,7 +245,7 @@ class PreprocessingnWidget(QWidget):
             data_corr = self.history.update_history(original_image, new_data)
 
         self.show_image(data_corr,
-                        'Intensity correction' + original_image.name,
+                        'Int-corr_' + original_image.name,
                         original_image.contrast_limits)
 
     def select_ROIs(self):
