@@ -187,75 +187,75 @@ class Correct():
         ans = img_to_int_type(ans, dtype=ans.dtype)
         return ans
 
-    def correct_dark(self, img: np.array) -> np.array:
-        """Subtract dark image from the img.
-        TODO: treating if dark correction goes negative?? Ask if to continue?
+    # def correct_dark(self, img: np.array) -> np.array:
+    #     """Subtract dark image from the img.
+    #     TODO: treating if dark correction goes negative?? Ask if to continue?
 
-        Args:
-            img (np.array): Img to be corrected
+    #     Args:
+    #         img (np.array): Img to be corrected
 
-        Raises:
-            IndexError: If the shapes do not match
+    #     Raises:
+    #         IndexError: If the shapes do not match
 
-        Returns:
-            np.array: corrected image
-        """
-        if self.dark.shape != img.shape:
-            raise IndexError('images do not have the same shape')
+    #     Returns:
+    #         np.array: corrected image
+    #     """
+    #     if self.dark.shape != img.shape:
+    #         raise IndexError('images do not have the same shape')
 
-        # correction
-        ans = img - self.dark
-        # test for negative values
-        is_positive(ans, 'Dark-field')
+    #     # correction
+    #     ans = img - self.dark
+    #     # test for negative values
+    #     is_positive(ans, 'Dark-field')
 
-        # cast it on correct dtype
-        ans = img_to_int_type(ans,  dtype=img.dtype)
-        return ans
+    #     # cast it on correct dtype
+    #     ans = img_to_int_type(ans,  dtype=img.dtype)
+    #     return ans
 
-    def correct_bright(self, img: np.array) -> np.array:
-        """Correct image using a bright-field correction image
+    # def correct_bright(self, img: np.array) -> np.array:
+    #     """Correct image using a bright-field correction image
 
-        Args:
-            img (np.arrays): Img to correct
+    #     Args:
+    #         img (np.arrays): Img to correct
 
-        Raises:
-            IndexError: If the shapes do not match
+    #     Raises:
+    #         IndexError: If the shapes do not match
 
-        Returns:
-            np.array: Corrected image
-        """
-        if self.bright.shape != img.shape:
-            raise IndexError('images do not have the same shape')
+    #     Returns:
+    #         np.array: Corrected image
+    #     """
+    #     if self.bright.shape != img.shape:
+    #         raise IndexError('images do not have the same shape')
 
-        # bright-field needs to be first corrected with
-        # dark and hot pixels if possible
-        try:
-            self.bright_corr = norm_img(self.bright_corr)
-        except:
-            print('Probably bright is not yet dark/hot corrected, trying that')
-            # TODO: ensure this is done only once. Should offer redoing it
-            # from the raw image, if user tries to run this second time.
-            self.bright_corr = self.correct_dark(self.bright)      
-            if self.hot is None:
-                pass
-            else:
-                try:
-                    # the same as above, run only once.
-                    self.bright_corr = self.correct_hot(self.bright_corr)
-                except TypeError:
-                    pass
+    #     # bright-field needs to be first corrected with
+    #     # dark and hot pixels if possible
+    #     try:
+    #         self.bright_corr = norm_img(self.bright_corr)
+    #     except:
+    #         print('Probably bright is not yet dark/hot corrected, trying that')
+    #         # TODO: ensure this is done only once. Should offer redoing it
+    #         # from the raw image, if user tries to run this second time.
+    #         self.bright_corr = self.correct_dark(self.bright)      
+    #         if self.hot is None:
+    #             pass
+    #         else:
+    #             try:
+    #                 # the same as above, run only once.
+    #                 self.bright_corr = self.correct_hot(self.bright_corr)
+    #             except TypeError:
+    #                 pass
 
-            # normalize to one (return floats)
-            self.bright_corr = norm_img(self.bright_corr)
-        # not overflow, because a float
-        ans = img / self.bright_corr
+    #         # normalize to one (return floats)
+    #         self.bright_corr = norm_img(self.bright_corr)
+    #     # not overflow, because a float
+    #     ans = img / self.bright_corr
 
-        # test for negative values
-        is_positive(ans, 'Bright-field')
+    #     # test for negative values
+    #     is_positive(ans, 'Bright-field')
 
-        # cast it on correct dtype, and clips negative values!!
-        ans = img_to_int_type(ans, dtype=img.dtype)
-        return ans
+    #     # cast it on correct dtype, and clips negative values!!
+    #     ans = img_to_int_type(ans, dtype=img.dtype)
+    #     return ans
 
     def correct_int(self, img_stack: np.ndarray, mode: str = 'integral',
                     use_bright: bool = True, rect_dim: int = 50,

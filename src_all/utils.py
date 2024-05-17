@@ -9,7 +9,6 @@ Utility functions for stack operations
 TODO: perform timing on real data and consider threading.
 """
 
-
 def select_roi(stack: np.ndarray,
                ul_corner: tuple, height: int,
                width: int) -> tuple[np.ndarray, tuple]:
