@@ -96,7 +96,7 @@ class Backtrack:
             self.update_roi_pars(data_dict['roi_def'])
         except:
             pass
-        print('debug update history', history.roi_def)
+        # print('debug update history', history.roi_def)
         return data_dict['data']
 
     # DP, this should be checked upon Qt widget values
@@ -148,7 +148,7 @@ class Backtrack:
         # resetting history dictionary, because only 1 operation can be tracked
         data = self.history_item.pop('data')
         self.history_item = dict()
-        print('debug undo', history.roi_def)
+        # print('debug undo', history.roi_def)
         return data
 
     def revert_to_raw(self):
@@ -197,11 +197,12 @@ def select_ROIs(viewer: Viewer,
                 roi_width: Annotated[int, {'min': 1, 'max': 5000}] = 200,
                 ):
     original_stack = np.asarray(image.data)
-    points = np.asarray(points_layer.data)
-    notifications.show_info(f'UL corner coordinates: {points[0][1:].astype(int)}')
+    lastPoint = points_layer.data[-1]
+
+    notifications.show_info(f'UL corner coordinates: {lastPoint.astype(int)}')
 
     selected_roi, roi_pars = select_roi(original_stack,
-                                        points[-1],
+                                        tuple(lastPoint),
                                         roi_height,
                                         roi_width)
     if history.inplace:
@@ -312,13 +313,13 @@ def corrections(viewer: Viewer,
     # preallocate corrected array
     data_corr = np.zeros(original_stack.shape,
                          dtype=original_stack.dtype)
-    print(f'number of hot pixels: {len(corr.hot_pxs)}')
+    # print(f'number of hot pixels: {len(corr.hot_pxs)}')
 
     # dark-field
     if dark is not None:
         for i, img in progress(enumerate(original_stack)):
             data_corr[i] = corr.correct_dark(img)
-        print(f'{np.amax(data_corr)}, min: {np.amin(data_corr)}')
+            print(f'max: {np.amax(data_corr)}, min: {np.amin(data_corr)}')
         notifications.show_info('Dark correction done.')
 
     # bright-field

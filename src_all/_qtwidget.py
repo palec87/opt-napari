@@ -1,328 +1,764 @@
 import numpy as np
-from napari.layers import Image, Points
-from magicgui import magic_factory
-from napari import Viewer
-from napari.utils import notifications
 
-from typing import Annotated
-import warnings
-import os 
-from .widget_settings import Settings, Combo_box
-#import processors
 import napari
-from qtpy.QtWidgets import QVBoxLayout, QSplitter, QHBoxLayout, QWidget, QPushButton, QLineEdit, QSpinBox, QDoubleSpinBox, QFormLayout, QComboBox, QLabel
-# from qtpy.QtCore import Qt
-from napari.layers import Image
-import numpy as np
-from napari.qt.threading import thread_worker
-import warnings
-from time import time
-import scipy.ndimage as ndi
-from enum  import Enum
-import cv2 
-import tqdm
-from corrections import Correct
+from napari.layers import Image, Points
+from napari.utils import progress, notifications
+from magicgui.widgets import create_widget
 
+from qtpy.QtWidgets import (
+    QVBoxLayout, QHBoxLayout,
+    QWidget, QPushButton, QLineEdit,
+    QRadioButton, QLabel,
+    QButtonGroup, QGroupBox,
+    QMessageBox, QDialog, QSizePolicy,
+)
+
+from enum import Enum
+import matplotlib as mpl
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_qt5agg import (
+    FigureCanvasQTAgg as FigureCanvas
+)
+
+from widget_settings import Settings, Combo_box
+from corrections import Correct
+from backtrack import Backtrack
 from utils import (
     select_roi,
     bin_3d,
 )
-from dataclasses import dataclass
+
+
+DEBUG = True
+badPxDict = {
+    'Identify Hot pxs': 'hot',
+    'Identify Dead pxs': 'dead',
+    'Identify Both': 'both',
+}
+
+
+class neighbours_choice_modes(Enum):
+    n4 = 1
+    n8 = 2
+
+
+# TODO: Correct() as a class attribute? Right now it is created in each method
+def layer_container_and_selection(
+        viewer=None,
+        layer_type=Image,
+        container_name='Layer'):
+    """
+    Create a container and a dropdown widget to select the layer.
+
+    Returns
+    -------
+    A tuple containing a QWidget for displaying the layer selection container,
+    and a QWidget containing the selection options for the layer.
+    """
+    layer_selection_container = QWidget()
+    layer_selection_container.setLayout(QHBoxLayout())
+    layer_selection_container.layout().addWidget(QLabel(container_name))
+    layer_select = create_widget(annotation=layer_type, label="layer")
+    layer_selection_container.layout().addWidget(layer_select.native)
+    layer_selection_container.layout().setContentsMargins(0, 0, 0, 0)
+
+    if viewer is not None and viewer.layers.selection.active is not None:
+        layer_select.value = viewer.layers.selection.active
+
+    return layer_selection_container, layer_select
+
 
 class PreprocessingnWidget(QWidget):
     name = 'Preprocessor'
-    
-    def __init__(self, viewer:napari.Viewer):
-        self.viewer = viewer
+
+    def __init__(self, viewer: napari.Viewer):
         super().__init__()
+        self.viewer = viewer
+        self.history = Backtrack()
         self.setup_ui()
-        # self.viewer.dims.events.current_step.connect(self.select_index)
-    
+
+        # setup_ui initializes track and inplace values
+        # here I update history instance flags
+        self.updateHistoryFlags()
+
+    def correctDarkBright(self):
+        # display message in the message box
+        self.messageBox.setText('Correcting Dark and Bright')
+
+        # TODO: inplace and tracking needs to be taken care of here.
+
+        original_image = self.image_layer_select.value
+        dark = self.dark_layer_select.value.data
+        bright = self.bright_layer_select.value.data
+        data_corr = np.zeros(original_image.data.shape,
+                            #  dtype=original_image.data.dtype, # I do not like not keeping the dtyp the same, but float operations do not work otherwise
+                             )
+        if self.flagBright.val:
+            if self.flagDark.val and self.flagExp == 'Transmission':
+                data_corr = ((original_image.data - dark) /
+                             (bright - dark)).astype(np.float32)
+                # because it is float between 0-1, needs to be rescaled
+                # and casted to uint16 check if the image has element
+                # greater than 1 or less than 0
+                print('How the division works?', original_image.data.shape,
+                      bright.shape, dark.shape)
+
+                if np.amax(data_corr) > 1 or np.amin(data_corr) < 0:
+                    self.messageBox.setText(
+                        'Dark included, image values out of range. Clipping to 0-1.',
+                        )
+                    print('Overflows', data_corr.min().compute(),
+                          data_corr.max().compute())
+                    data_corr = np.clip(data_corr, 0, 1)
+
+                data_corr = (data_corr * 65535).astype(np.uint16)
+
+            elif self.flagExp == 'Emission':
+                # this is integer, no casting needed
+                data_corr = original_image.data - bright
+            else:  # transmission, no dark correction
+                data_corr = original_image.data / bright
+                # this is float between 0-1, rescaled and cast to uint16
+                # make sure that the image is between 0-1 first
+                if np.amax(data_corr) > 1 or np.amin(data_corr) < 0:
+                    self.messageBox.setText(
+                        'No dark, image values out of range. Clipping to 0-1.',
+                        )
+                    data_corr = np.clip(data_corr, 0, 1)
+                data_corr = (data_corr * 65535).astype(np.uint16)
+
+        elif self.flagDark.val:  # only dark correction
+            # this is integer, no casting needed
+            data_corr = original_image.data - dark
+        else:
+            self.messageBox.setText(
+                'No correction selected.',
+                )
+            data_corr = original_image.data
+
+        # history update
+        if self.history.inplace:
+            new_data = {'operation': 'corrDB',
+                        'data': data_corr,
+                        }
+            data_corr = self.history.update_history(original_image,
+                                                    new_data)
+
+        self.show_image(data_corr,
+                        'Dark-Bright-corr_' + original_image.name,
+                        original_image.contrast_limits)
+
+    # hot pixels correction (NOT WORKING YET)
+    def correctBadPixels(self):
+        """Corrects hot pixels in the image.
+
+        This method corrects hot pixels in the image using a correction
+        algorithm. It calculates the number of hot pixels and dead pixels,
+        and provides an option to either correct the hot pixels or display
+        them. If the correction is performed in-place, it also
+        updates the history of the image.
+
+        Returns:
+            None
+        """
+        original_image = self.image_layer_select.value
+
+        # init correction class
+        self.messageBox.setText('Correcting hot pixels.')
+        corr = Correct(hot=self.hot_layer_select.value.data,
+                       std_mult=self.std_cutoff.val)
+        hotPxs, deadPxs = corr.get_bad_pxs(mode=self.flagBad)
+
+        self.messageBox.setText(f'Number of hot pixels: {len(hotPxs)}')
+        self.messageBox.setText(f'Number of dead pixels: {len(deadPxs)}')
+
+        dlg = QMessageBox(self)
+        dlg.setWindowTitle("Bad Pixel correction")
+        dlg.setText("Do you want to correct all those pixels! \n"
+                    "It can take a while. \n"
+                    f"{len(hotPxs)} + {len(deadPxs)}")
+        dlg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        button = dlg.exec()
+
+        # yes/no dialog to ask if the user wants to correct the hot pixels
+        if button == QMessageBox.No:
+            # display bad pixels
+            data_corr = np.zeros(self.hot_layer_select.value.data.shape,
+                                 dtype=original_image.data.dtype)
+            # hot pixels and dead pixels are displayed as 100
+            for _i, (y, x) in enumerate(hotPxs):
+                data_corr[y, x] = 100
+            for _i, (y, x) in enumerate(deadPxs):
+                data_corr[y, x] = 101
+            self.show_image(data_corr,
+                            'Bad_pixels_' + self.hot_layer_select.value.name,
+                            # self.hot_layer_select.value.contrast_limits,
+                            )
+            return
+
+        # Correction is done, TODO: ooptimized for the volumes and threaded
+        data_corr = np.zeros(original_image.data.shape,
+                             dtype=original_image.data.dtype)
+        for i, img in progress(enumerate(original_image.data)):
+            data_corr[i] = corr.correctBadPxs(img)
+            print(i)
+
+        # history update
+        if self.history.inplace:
+            new_data = {'operation': 'corrBP',
+                        'data': data_corr,
+                        'mode': self.flagBad,
+                        'hot_pxs': hotPxs,
+                        'dead_pxs': deadPxs,
+                        }
+            data_corr = self.history.update_history(original_image, new_data)
+
+        self.show_image(data_corr,
+                        'Bad-px-corr_' + original_image.name,
+                        original_image.contrast_limits)
+
+    def correctIntensity(self):
+        """Corrects the intensity of the image.
+
+        This method performs intensity correction on the selected image layer.
+        It uses the `Correct` class to perform the correction and updates the
+        image data accordingly. If the correction is performed in-place, it
+        also updates the history of the image.
+        """
+        self.messageBox.setText('Correcting intensity.')
+        corr = Correct(bright=self.bright_layer_select.value.data)
+
+        # data to correct
+        original_image = self.image_layer_select.value
+        data_corr = np.zeros(original_image.data.shape,
+                             dtype=original_image.data.dtype)
+
+        # intensity correction
+        # TODO: use_bright should be a setting, not urgent
+        data_corr, corr_dict = corr.correct_int(
+                                    original_image.data,
+                                    use_bright=False,
+                                    rect_dim=self.rectSize.val)
+
+        # TODO: open widget with a intensity plots
+        self.plotDialog = PlotDialog(self, corr_dict)
+        self.plotDialog.resize(800, 400)
+        self.plotDialog.show()
+
+        # history update
+        if self.history.inplace:
+            new_data = {'operation': 'corrInt',
+                        'data': data_corr,
+                        'rect_dim': self.rectSize.val,
+                        }
+            data_corr = self.history.update_history(original_image, new_data)
+
+        self.show_image(data_corr,
+                        'Int-corr_' + original_image.name,
+                        original_image.contrast_limits)
+
+    def select_ROIs(self):
+        """Selects regions of interest (ROIs) based on the given points.
+
+        This method takes the selected image layer and the points layer as
+        input. It calculates the upper-left corner coordinates of the last
+        point in the points layer, and displays them in a message box. Then,
+        it uses the `select_roi` function to extract the selected ROI from
+        the original image data, based on the last point, ROI height, and ROI
+        width. If the `inplace` flag is set in the `history` object,
+        it updates the history with the ROI operation.
+        """
+        original_image = self.image_layer_select.value
+        try:
+            points = self.points_layer_select.value.data
+        except AttributeError:
+            self.messageBox.setText('No points layer selected.')
+            return
+        self.messageBox.setText(
+            f'UL corner coordinates: {points[0][1:].astype(int)}')
+
+        # DP: do I need roi pars for tracking?
+        selected_roi, roi_pars = select_roi(original_image.data,
+                                            points[-1],  # last point
+                                            self.roi_height.val,
+                                            self.roi_width.val)
+
+        # history update
+        if self.history.inplace:
+            new_data = {'operation': 'roi',
+                        'data': selected_roi,
+                        'roi_def': roi_pars,
+                        }
+            selected_roi = self.history.update_history(original_image,
+                                                       new_data)
+
+        self.show_image(selected_roi,
+                        'ROI_' + original_image.name,
+                        original_image.contrast_limits)
+
+    def bin_stack(self):
+        """Bins the selected image stack by the specified bin factor.
+
+        If the bin factor is 1, nothing is done and an info notification is
+        shown. Otherwise, the selected image stack is binned by the bin factor
+        and the binned stack is displayed. The original and binned stack shapes
+        are also shown in an info notification.
+
+        If the history is set to inplace, the binning operation is added to the
+        history with the updated binned stack.
+        """
+        if self.bin_factor.val == 1:
+            notifications.show_info('Bin factor is 1, nothing to do.')
+            return
+
+        original_image = self.image_layer_select.value
+        binned_roi = bin_3d(original_image.data, self.bin_factor.val)
+        notifications.show_info(
+            f'Original shape: {original_image.data.shape},'
+            f'binned shape: {binned_roi.shape}')
+
+        # history update
+        if self.history.inplace:
+            new_data = {'operation': 'bin',
+                        'data': binned_roi,
+                        'bin_factor': self.bin_factor.val,
+                        }
+            binned_roi = self.history.update_history(original_image, new_data)
+
+        self.show_image(binned_roi,
+                        'binned_' + original_image.name,
+                        original_image.contrast_limits)
+
+    def calcLog(self):
+        """Calculate the logarithm of the image data.
+
+        This method calculates the logarithm of the image data and updates
+        the displayed image accordingly. It also updates the history if the
+        operation is performed in-place.
+        """
+        self.messageBox.setText('Calculating -Log')
+        original_image = self.image_layer_select.value
+        log_image = -np.log10(original_image.data)
+
+        if self.history.inplace:
+            new_data = {'operation': 'log',
+                        'data': log_image,
+                        }
+            log_image = self.history.update_history(original_image, new_data)
+
+        self.show_image(log_image,
+                        '-Log_' + original_image.name,
+                        )
+
+    def undoHistory(self):
+        """Undo the last operation in the history.
+
+        This method undoes the last operation in the history and updates the
+        displayed image accordingly. If the history is empty, an info
+        notification is shown.
+        """
+        last_op = self.history.history_item['operation']
+        self.image_layer_select.value.data = self.history.undo()
+
+        # reset contrast limits
+        self.image_layer_select.value.reset_contrast_limits()
+        self.messageBox.setText(f'Undoing {last_op}')
+
+    ##################
+    # Helper methods #
+    ##################
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self.reset_choices()
+
+    def reset_choices(self, event=None):
+        self.image_layer_select.reset_choices(event)
+        self.hot_layer_select.reset_choices(event)
+        self.dark_layer_select.reset_choices(event)
+        self.bright_layer_select.reset_choices(event)
+        self.points_layer_select.reset_choices(event)
+
+    def show_image(self, image_values, fullname, contrast=None):
+        if self.inplace.val:
+            fullname = self.image_layer_select.value.name
+            self.viewer.layers[fullname].data = image_values
+            if contrast is not None:
+                self.viewer.layers[fullname].contrast_limits = contrast
+            else:
+                self.viewer.layers[fullname].reset_contrast_limits()
+
+        else:
+            self.viewer.add_image(image_values,
+                                  name=fullname,
+                                  contrast_limits=contrast,
+                                  interpolation2d='linear')
+
+    def set_preprocessing(self, *args):
+        """ Sets preprocessing parameters
+        """
+        if hasattr(self, 'h'):
+            self.h.inplace_val = self.inplace.val
+            self.h.track_val = self.track.val
+            self.h.cutoff_val = self.std_cutoff.val
+            self.h.height_val = self.roi_height.val
+            self.h.width_val = self.roi_width.val
+            self.h.binning_val = self.bin_factor.val
+
+    def updateHistoryFlags(self):
+        self.history.set_settings(self.inplace.val, self.track.val)
+
+    ##############
+    # UI methods #
+    ##############
     def setup_ui(self):
         # initialize layout
         layout = QVBoxLayout()
         self.setLayout(layout)
 
-        def add_section(_layout, _title):
-            from qtpy.QtCore import Qt
-            splitter = QSplitter(Qt.Vertical)
-            _layout.addWidget(splitter)
-            # _layout.addWidget(QLabel(_title))
-        
+        mode_layout = QVBoxLayout()
+        layout.addLayout(mode_layout)
+        self.selectProcessingMode(mode_layout)
 
+        # layers selection containers
+        (image_selection_container,
+         self.image_layer_select) = layer_container_and_selection(
+                                        viewer=self.viewer,
+                                        layer_type=Image,
+                                        container_name='Image to analyze',
+                                        )
+
+        (hot_image_selection_container,
+         self.hot_layer_select) = layer_container_and_selection(
+                                    viewer=self.viewer,
+                                    layer_type=Image,
+                                    container_name='Hot correction image',
+                                    )
+        (dark_image_selection_container,
+         self.dark_layer_select) = layer_container_and_selection(
+                                        viewer=self.viewer,
+                                        layer_type=Image,
+                                        container_name='Dark correction image',
+                                        )
+        (bright_image_selection_container,
+         self.bright_layer_select) = layer_container_and_selection(
+                                        viewer=self.viewer,
+                                        layer_type=Image,
+                                        container_name='Bright correction image',
+                                        )
+        (points_selection_container,
+         self.points_layer_select) = layer_container_and_selection(
+                                        viewer=self.viewer,
+                                        layer_type=Points,
+                                        container_name='Points layer for ROI selection',
+                                        )
+
+        # layers selection layout
         image_layout = QVBoxLayout()
-        add_section(image_layout,'Image selection')
         layout.addLayout(image_layout)
-        
-        self.choose_layer_widget = choose_layer()
-        self.choose_layer_widget.call_button.visible = False
-        self.add_magic_function(self.choose_layer_widget, image_layout)
-        select_button = QPushButton('Select image layer')
-        select_button.clicked.connect(self.select_layer)
-        image_layout.addWidget(select_button)
+        self.layout().addWidget(image_selection_container)
+        self.layout().addWidget(hot_image_selection_container)
+        self.layout().addWidget(dark_image_selection_container)
+        self.layout().addWidget(bright_image_selection_container)
+        self.layout().addWidget(points_selection_container)
 
+        # inplace and track options
         settings_layout = QVBoxLayout()
-        add_section(settings_layout,'Settings')
         layout.addLayout(settings_layout)
+
         self.createSettings(settings_layout)
 
+    def selectProcessingMode(self, slayout):
+        groupbox = QGroupBox('Global settings')
+        box = QVBoxLayout()
+        groupbox.setLayout(box)
+
+        # layout for radio buttons
+        boxSetting = QHBoxLayout()
+        self.inplace = Settings('Inplace operations',
+                                dtype=bool,
+                                initial=True,
+                                layout=boxSetting,
+                                write_function=self.set_preprocessing)
+
+        self.track = Settings('Track',
+                              dtype=bool,
+                              initial=False,
+                              layout=boxSetting,
+                              write_function=self.set_preprocessing)
+
+        box.addLayout(boxSetting)
+        # undo button
+        self.undoBtn = QPushButton('Undo')
+        self.undoBtn.clicked.connect(self.undoHistory)
+        box.addWidget(self.undoBtn)
+
+        # make self.track visible only when self.inplace is True
+        slayout.addWidget(groupbox)
+        self.setTrackVisibility()
+        self.inplace.sbox.stateChanged.connect(self.updateHistoryFlags)
+        self.track.sbox.stateChanged.connect(self.updateHistoryFlags)
+
+    def setTrackVisibility(self):
+        # initial setting
+        self.track.sbox.setVisible(self.inplace.val)
+        self.track.lab.setVisible(self.inplace.val)
+        self.undoBtn.setVisible(self.track.val)
+
+        # update visibility of track box when inplace box is changed
+        self.inplace.sbox.stateChanged.connect(
+            lambda: self.track.sbox.setVisible(self.inplace.val))
+        # update the label visibility of track box when inplace box is changed
+        self.inplace.sbox.stateChanged.connect(
+            lambda: self.track.lab.setVisible(self.inplace.val))
+
+        # update visibility of undoBtn when track box is changed
+        self.track.sbox.stateChanged.connect(
+            lambda: self.undoBtn.setVisible(self.track.val))
+
+    def updateExperimentMode(self, button):
+        self.flagExp = button.text()
+        self.messageBox.setText(f'Experiment modality: {self.flagExp}')
+
+    def updateBadPixelsMode(self, button):
+        self.flagBad = badPxDict[button.text()]
+        self.messageBox.setText(f'Bad pixels option: {self.flagBad}')
+
     def createSettings(self, slayout):
-        
-        self.reshapebox = Settings('Reshape volume',
-                                  dtype=bool,
-                                  initial = True, 
-                                  layout=slayout, 
-                                  write_function = self.set_opt_processor)        
+        # message box
+        self.messageBox = QLineEdit()
+        self.messageBox.setReadOnly(True)
+        self.messageBox.setText('Messages')
 
-        self.resizebox = Settings('Reconstruction size',
-                                  dtype=int, 
-                                  initial=100, 
-                                  layout=slayout, 
-                                  write_function = self.set_opt_processor)
-        
-        self.clipcirclebox = Settings('Clip to circle',
-                            dtype=bool,
-                            initial = False, 
-                            layout=slayout, 
-                            write_function = self.set_opt_processor)        
+        # Linear structure to impose correct order
+        groupbox1 = QGroupBox('Dark/Bright Correction')
+        boxAll = QVBoxLayout()
+        boxExp = QHBoxLayout()
+        groupbox1.setLayout(boxAll)
 
-        self.filterbox = Settings('Use filtering',
-                            dtype=bool,
-                            initial = False, 
-                            layout=slayout, 
-                            write_function = self.set_opt_processor) 
-        
+        # create QradioButtons
+        groupExpMode = QButtonGroup(self)
+        groupExpMode.buttonClicked.connect(self.updateExperimentMode)
 
-        self.registerbox = Settings('Automatic axis alignment',
-                                  dtype=bool,
-                                  initial=False, 
-                                  layout=slayout, 
-                                  write_function = self.set_opt_processor)
-        
-        self.manualalignbox = Settings('Manual axis alignment',
-                            dtype=bool,
-                            initial = False, 
-                            layout=slayout, 
-                            write_function = self.set_opt_processor) 
-        
-        self.alignbox = Settings('Axis shift',
-                            dtype=int,
-                            vmin=-500,
-                            vmax=500, 
-                            initial=0, 
-                            layout=slayout, 
-                            write_function = self.set_opt_processor)
-        
-        
-        
-        #create combobox for reconstruction method
-        self.reconbox = Combo_box(name ='Reconstruction method',
-                             initial = Rec_modes.FBP_GPU.value,
-                             choices = Rec_modes,
-                             layout = slayout,
-                             write_function = self.set_opt_processor)
-        
-        self.orderbox = Combo_box(name ='Rotation axis',
-                             initial = Order_Modes.Horizontal.value,
-                             choices = Order_Modes,
-                             layout = slayout,
-                             write_function = self.set_opt_processor)
+        transExp = QRadioButton('Transmission')
+        transExp.setChecked(True)
+        groupExpMode.addButton(transExp)
+        boxExp.addWidget(transExp)
 
-        # add calculate psf button
-        calculate_btn = QPushButton('Reconstruct')
-        calculate_btn.clicked.connect(self.stack_reconstruction)
-        slayout.addWidget(calculate_btn)
+        emlExp = QRadioButton('Emmision')
+        groupExpMode.addButton(emlExp)
+        boxExp.addWidget(emlExp)
+        boxAll.addLayout(boxExp)
+
+        # update flag
+        self.updateExperimentMode(groupExpMode.checkedButton())
+
+        boxInclude = QHBoxLayout()
+        # checkboxes
+        self.flagDark = Settings('Include Dark',
+                                 dtype=bool,
+                                 initial=False,
+                                 layout=boxInclude,
+                                 write_function=self.set_preprocessing)
+        self.flagBright = Settings('Include Bright',
+                                   dtype=bool,
+                                   initial=False,
+                                   layout=boxInclude,
+                                   write_function=self.set_preprocessing)
+        boxAll.addLayout(boxInclude)
+        # Now comes button
+        self.addButton(boxAll, 'Correct Dark+Bringht', self.correctDarkBright)
+        slayout.addWidget(groupbox1)
+
+        # create a groupbox for hot pixel correction
+        groupbox2 = QGroupBox('Bad pixels correction')
+        box2 = QVBoxLayout()
+        groupbox2.setLayout(box2)
+
+        # Hot pixel correction
+        self.neigh_mode = Combo_box(name='Mode', 
+                                    choices=neighbours_choice_modes, 
+                                    layout=box2,
+                                    write_function=self.reset_choices)  # TODO check if reset_choices is correct
+        self.std_cutoff = Settings('Hot STD cutoff',
+                                   dtype=int,
+                                   initial=5,
+                                   vmin=1,
+                                   vmax=20,
+                                   layout=box2,
+                                   write_function=self.set_preprocessing)
+
+        groupBadPxMode = QButtonGroup(self)
+        groupBadPxMode.buttonClicked.connect(self.updateBadPixelsMode)
+
+        flagGetHot = QRadioButton('Identify Hot pxs')
+        flagGetHot.setChecked(True)
+        groupBadPxMode.addButton(flagGetHot)
+        box2.addWidget(flagGetHot)
+
+        flagGetDead = QRadioButton('Identify Dead pxs')
+        groupBadPxMode.addButton(flagGetDead)
+        box2.addWidget(flagGetDead)
+
+        flagGetBoth = QRadioButton('Identify Both')
+        groupBadPxMode.addButton(flagGetBoth)
+        box2.addWidget(flagGetBoth)
+
+        self.updateBadPixelsMode(groupBadPxMode.checkedButton())
+
+        self.addButton(box2, 'Hot pixel correction', self.correctBadPixels)
+        slayout.addWidget(groupbox2)
+
+        # Intensity correction
+        # create a groupbox for Intensity correction
+        groupboxInt = QGroupBox('Intensity correction')
+        boxInt = QVBoxLayout()
+        groupboxInt.setLayout(boxInt)
+        self.rectSize = Settings('Rectangle size',
+                                 dtype=int,
+                                 initial=50,
+                                 vmin=10,
+                                 vmax=500,
+                                 layout=boxInt,
+                                 write_function=self.set_preprocessing)
+        self.addButton(boxInt, 'Intensity correction', self.correctIntensity)
+        slayout.addWidget(groupboxInt)
+
+        # select ROI
+        groupboxRoi = QGroupBox('ROI selection')
+        boxRoi = QVBoxLayout()
+        groupboxRoi.setLayout(boxRoi)
+        self.roi_height = Settings('ROI height',
+                                   dtype=int,
+                                   initial=200,
+                                   vmin=1,
+                                   vmax=5000,
+                                   layout=boxRoi,
+                                   write_function=self.set_preprocessing)
+
+        self.roi_width = Settings('ROI width',
+                                  dtype=int,
+                                  initial=200,
+                                  vmin=1,
+                                  vmax=5000,
+                                  layout=boxRoi,
+                                  write_function=self.set_preprocessing)
+        self.addButton(boxRoi, 'Select ROI', self.select_ROIs)
+        slayout.addWidget(groupboxRoi)
+
+        # binning
+        groupboxBin = QGroupBox('Binning')
+        boxBin = QVBoxLayout()
+        groupboxBin.setLayout(boxBin)
+
+        self.bin_factor = Settings('Bin factor',
+                                   dtype=int,
+                                   initial=2,
+                                   vmin=1,
+                                   vmax=500,
+                                   layout=boxBin,
+                                   write_function=self.set_preprocessing)
+        self.addButton(boxBin, 'Bin Stack', self.bin_stack)
+        slayout.addWidget(groupboxBin)
+
+        # -Log
+        self.addButton(slayout, '-Log', self.calcLog)
+
+        # TODO: set message bos scrollable or stretchable, this below does not work
+        slayout.setSizeConstraint(QVBoxLayout.SetNoConstraint)
+        slayout.addWidget(self.messageBox, stretch=3)
+
+    def addButton(self, layout, button_name, call_function):
+        button = QPushButton(button_name)
+        button.clicked.connect(call_function)
+        layout.addWidget(button)
 
 
-@dataclass
-class Backtrack:
-    """ 
-    Supports one undo operation. Only for inplace operations.
-    Will break if:
-        You operate on more datasets in parallel
+class PlotDialog(QDialog):
     """
-    # def __init__(self) -> None:
-    raw_data: np.ndarray = None
-    last_data: np.ndarray = None
-    # roi_def: tuple = ()  # indices refer always to raw data
-    track: bool = False
-    inplace: bool = False
-    history_item = dict()
-
-    def update_tracking(self, value: bool):
-        
-        self.track = value
-        if self.track is True:
-
-
-    def update_history(self, operation, data_dict):
-        if operation == 'roi':
-            pass
-        elif operation == 'bin':
-            pass
-        elif operation == 'correct':
-            pass
-        else:
-            raise TypeError('Unknown operation to update history.')
-        
-        self.operation = operation
-        
-    def revert_history(self):
-        pass
-
-    def revert_to_raw(self):
-        pass
+    Create a pop-up widget with the OPT time execution
+    statistical plots. Timings are collected during the last run
+    OPT scan. The plots show the relevant statistics spent
+    on particular tasks during the overall experiment,
+    as well as per OPT step.
+    """
+    def __init__(self, parent, report: dict) -> None:
+        super(PlotDialog, self).__init__(parent)
+        self.mainWidget = QWidget()
+        layout = QVBoxLayout(self.mainWidget)
+        canvas = IntCorrCanvas(report, self.mainWidget, width=300, height=300)
+        layout.addWidget(canvas)
+        self.setLayout(layout)
 
 
-history = Backtrack()
+class IntCorrCanvas(FigureCanvas):
+    def __init__(self, data_dict, parent=None, width=300, height=300):
+        """ Plot of the report
 
+        Args:
+            corr_dict (dict): report data dictionary
+            parent (_type_, optional): parent class. Defaults to None.
+            width (int, optional): width of the plot in pixels.
+                Defaults to 300.
+            height (int, optional): height of the plot in pixels.
+                Defaults to 300.
+        """
+        fig = Figure(figsize=(width, height))
+        self.ax1 = fig.add_subplot()
+        # self.ax2 = fig.add_subplot(132)
+        # self.ax3 = fig.add_subplot(133)
 
-# ROI
-@magic_factory(call_button="Select ROI")
-def select_ROIs(viewer: Viewer,
-                image: Image,
-                points_layer: Points,
-                roi_height: Annotated[int, {'min': 1, 'max': 5000}] = 200,
-                roi_width: Annotated[int, {'min': 1, 'max': 5000}] = 200,
-                inplace: bool = True,
-                track_history: bool = False,
-                ):
-    shared_variables.track = track_history
-    original_stack = np.asarray(image.data)
-    points = np.asarray(points_layer.data)
-    notifications.show_info(f'UL corner coordinates: {points[0][1:].astype(int)}')
+        self.createFigure(data_dict)
 
-    selected_roi, roi_pars = select_roi(original_stack,
-                                        points[-1],
-                                        roi_height,
-                                        roi_width)
-    # if I do this twice, I will get wrong indicis for corrections!!!
-    update_roi_pars(roi_pars)
-    # shared_variables.roi_def: roi_pars
-    # partial solution to tracking history
-    # TODO: does not work, if you are on wrong layer, or perhaps
-    # user deleted one layer going back one step, and wants to do another step
-    # Or changes the inplace parameter inbetween
-    # LOts of lose ends here!!!!
-    if inplace:
-        update_history(inplace, image, selected_roi)
-    else:
-        viewer.add_image(selected_roi)
+        FigureCanvas.__init__(self, fig)
+        self.setParent(parent)
 
+        FigureCanvas.setSizePolicy(self,
+                                   QSizePolicy.Expanding,
+                                   QSizePolicy.Expanding)
+        FigureCanvas.updateGeometry(self)
 
-# this will not work, if user applies it once on the roi and then again on the
-# raw, fuck me...
-# Fixing means making the history a proper class.
-def update_roi_pars(roi_pars):
-    if shared_variables.roi_def == ():
-        shared_variables.roi_def = roi_pars
-    else:
-        i1, i2, i3, i4 = shared_variables.roi_def
-        j1, j2, j3, j4 = roi_pars
-        shared_variables.roi_def = (
-            i1 + j1, i1 + j1 + j2,
-            i3 + j3, i3 + j3 + j4,
-        )
+    def createFigure(self, data_dict: dict) -> None:
+        """Create report plot.
 
+        Args:
+            data_dict (dict): Intensity correction dictionary.
+        """
+        my_cmap = mpl.colormaps.get_cmap("viridis")
+        colors = my_cmap(np.linspace(0, 1, 2))
+        self.ax1.plot(data_dict['stack_orig_int'],
+                      label='Original',
+                      color=colors[0])
 
-def update_history(inplace: bool, image: Image, new_image: np.ndarray):
-    if not shared_variables.track:
-        notifications.show_info('Tracking not enabled, no history to update (saving RAM).')
-        return
-    if not inplace:
-        notifications.show_info('Not an inplace operation, no tracking, just delete the layer.')
-        return
+        self.ax1.plot(data_dict['stack_corr_int'],
+                      label='Corrected',
+                      color=colors[1])
 
-    if shared_variables.raw_data is None:
-        shared_variables.raw_data = image.data.copy()
-    else:
-        shared_variables.last_data = image.data.copy()
+        self.ax1.set_xlabel('OPT step number')
+        self.ax1.set_ylabel('Intensity')
+        self.ax1.legend()
 
-    image.data = new_image
-    return
-
-
-# Revert history
-@magic_factory(call_button="Undo Last")
-def revert_last(viewer: Viewer, image: Image, inplace: bool):
-    if not shared_variables.track:
-        notifications.show_info('Tracking not enabled, no history to update (saving RAM).')
-        return
-
-    if shared_variables.last_data is not None:
-        notifications.show_info('Reverting to last data')
-        if inplace:
-            image.data = shared_variables.last_data
-        else:
-            viewer.add_image(shared_variables.last_data)
-        shared_variables.last_data = None
-
-    elif shared_variables.last_data is None and shared_variables.raw_data is not None:
-        notifications.show_info('Reverting to raw data')
-        if inplace:
-            image.data = shared_variables.raw_data
-        else:
-            viewer.add_image(shared_variables.raw_data)
-    else:
-        notifications.show_info('Nothing to revert to.')
-
-
-# Binning
-@magic_factory(call_button="Bin")
-def bin_stack(viewer: Viewer,
-              image: Image,
-              bin_factor: Annotated[int, {'min': 1, 'max': 500}] = 2,
-              ):
-    if bin_factor != 1:
-        binned_roi = bin_3d(image.data, bin_factor)
-        notifications.show_info(f'Original shape: {image.data.shape}, binned shape: {binned_roi.shape}')
-        viewer.add_image(binned_roi)
-    else:
-        notifications.show_info('Bin factor is 1, nothing to do.')
-
-
-# Image corrections
-# use Correct class
-@magic_factory(call_button="Image Corrections")
-def corrections(viewer: Viewer,
-                image: Image,
-                hot: Image = None,
-                std_cutoff: int = 5,
-                dark: Image = None,
-                bright: Image = None,
-                ):
-    original_stack = np.asarray(image.data)
-    # init correction class
-    Correct(hot, std_cutoff, dark, bright)
-
-    # # first correct bright field for dark
-    # bright_corr = bright.data - dark.data
-
-    # ans = np.empty(original_stack.shape)
-    # for i, img in enumerate(original_stack):
-    #     ans[i] = img - dark.data - bright_corr
-
-    # viewer.add_image(ans)
-
-@magic_factory
-def choose_layer(image: Image):
-        pass #TODO: substitute with a qtwidget without magic functions
 
 if __name__ == '__main__':
     import napari
-    viewer = napari.Viewer()
-    roi_widget = select_ROIs()
-    correct_widget = corrections()
-    bin_widget = bin_stack()
-    revert_widget = revert_last()
 
-    viewer.window.add_dock_widget(revert_widget, name='Undo Last',
-                                  area='right', add_vertical_stretch=True)
-    viewer.window.add_dock_widget(roi_widget, name='select ROI',
-                                  area='right', add_vertical_stretch=True)
-    viewer.window.add_dock_widget(bin_widget, name='Bin Stack',
-                                  area='right', add_vertical_stretch=True)
-    viewer.window.add_dock_widget(correct_widget, name='Image Corrections',
-                                  area='right', add_vertical_stretch=True)
-    warnings.filterwarnings('ignore')
+    viewer = napari.Viewer()
+    optWidget = PreprocessingnWidget(viewer)
+    viewer.window.add_dock_widget(optWidget, name='OPT Preprocessing')
+    # warnings.filterwarnings('ignore')
+    if DEBUG:
+        import glob
+        # load example data from data folder
+        viewer.open('src_all/sample_data/corr_hot.tiff', name='hot')
+        viewer.open('src_all/sample_data/dark_field.tiff', name='dark')
+        viewer.open('src_all/sample_data/flat_field.tiff', name='bright')
+
+        # open OPT stack
+        viewer.open(glob.glob('src_all/sample_data/16*'),
+                    stack=True,
+                    name='OPT data')
+        # set image layer to OPT data
+        optWidget.image_layer_select.value = viewer.layers['OPT data']
+        optWidget.hot_layer_select.value = viewer.layers['hot']
+        optWidget.dark_layer_select.value = viewer.layers['dark']
+        optWidget.bright_layer_select.value = viewer.layers['bright']
     napari.run()
