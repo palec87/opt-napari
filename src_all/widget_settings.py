@@ -188,14 +188,14 @@ class Combo_box():
 
     def create_combo_box(self, name, choices, userdata, width, layout):
         combo = QComboBox()
-        if type(choices) is list:  
+        if type(choices) is list:
             choices_names = choices
         elif type(choices) is EnumMeta:
             choices_names = choices._member_names_
             userdata = list(choices._value2member_map_.keys())
-        assert len(userdata) in (0, len(choices_names)), f'Uncorrect userdata in {self.name} Combobox'    
+        assert len(userdata) in (0, len(choices_names)), f'Uncorrect userdata in {self.name} Combobox'  # noqa
         for idx, choice in enumerate(choices_names):
-            shown_text = choice.replace('_',' ')
+            shown_text = choice.replace('_', ' ')
             if len(userdata) == len(choices):
                 data = userdata[idx]
                 combo.addItem(shown_text, userData=data)
@@ -243,7 +243,8 @@ def add_timer(function):
         start_time = time.time()
         result = function(*args, **kwargs)
         end_time = time.time()
-        print(f'Execution time for method "{function.__name__}": {end_time-start_time:.6f} s')
+        print('Execution time for method,'
+              f'"{function.__name__}": {end_time - start_time:.6f} s')
         return result
     inner.__name__ = function.__name__
     return inner

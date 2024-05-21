@@ -31,7 +31,7 @@ the same as the experimental exposure.
 """
 
 import numpy as np
-from .utils import norm_img, img_to_int_type, is_positive
+from utils import norm_img, img_to_int_type, is_positive
 
 
 class Correct():

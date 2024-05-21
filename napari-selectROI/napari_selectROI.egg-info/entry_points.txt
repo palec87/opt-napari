@@ -1,2 +1,0 @@
-[napari.manifest]
-napari-selectROI = napari_selectROI:napari.yaml

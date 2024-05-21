@@ -9,16 +9,20 @@ Utility functions for stack operations
 TODO: perform timing on real data and consider threading.
 """
 
+
 def select_roi(stack: np.ndarray,
                ul_corner: tuple, height: int,
                width: int) -> tuple[np.ndarray, tuple]:
     """
-    Select Region of Interest (ROI) relative to the Upper Left (UL) corner point. If points
-    layer contains more than one point, the last point is considered.
+    Select Region of Interest (ROI) relative to the Upper Left (UL) corner
+    point. If points layer contains more than one point, the last point
+    is considered.
 
     Args:
-        stack (np.ndarray): Stack of images, first dimension is the stacking dimension
-        ul_corner (tuple): tuple of x_coord, y_coord representing the upper left corner of the ROI
+        stack (np.ndarray): Stack of images, first dimension is the
+            stacking dimension
+        ul_corner (tuple): tuple of x_coord, y_coord representing the upper
+            left corner of the ROI
         height (int): Height of the ROI
         width (int): Width of the ROI
 
@@ -29,7 +33,8 @@ def select_roi(stack: np.ndarray,
             or if the UL corner is not within the array.
 
     Returns:
-        tuple[np.ndarray, tuple]: A tuple containing the ROI's image data from the stack and a tuple of the ROI's parameters (x1, x2, y1, y2)
+        tuple[np.ndarray, tuple]: A tuple containing the ROI's image data
+            from the stack and a tuple of the ROI's parameters (x1, x2, y1, y2)
     """
 
     # TODO: the errors on the napari should handled on the widget level
@@ -41,7 +46,8 @@ def select_roi(stack: np.ndarray,
         # x, y assumed to be the last two elements of the tuple
         x1, y1 = [int(k) for k in ul_corner[-2:]]
     except ValueError:
-        raise ValueError('UL corner must be defined by tuple of (x_coord, y_coord).')
+        raise ValueError(
+            'UL corner must be defined by tuple of (x_coord, y_coord).')
 
     # ensure that x1 and y1 are within the array
     if x1 < 0 or y1 < 0:
@@ -96,7 +102,8 @@ def bin_3d(stack: np.ndarray, bin_factor: int) -> np.ndarray:
                    )
 
     # subarray of stack that equals height_dim * bin_factor
-    if height_dim * bin_factor != stack.shape[1] or width_dim * bin_factor != stack.shape[2]:
+    if (height_dim * bin_factor != stack.shape[1] or
+        width_dim * bin_factor != stack.shape[2]):
         stack = stack[:, :height_dim * bin_factor, :width_dim * bin_factor]
 
     # binning is done along axis 1 and 2, mean is applied
