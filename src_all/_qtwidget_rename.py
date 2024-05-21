@@ -10,19 +10,17 @@ from qtpy.QtWidgets import (
     QWidget, QPushButton, QLineEdit,
     QRadioButton, QLabel,
     QButtonGroup, QGroupBox,
-    QMessageBox, QDialog, QSizePolicy, QFormLayout, QComboBox
+    QMessageBox, QDialog, QSizePolicy,
 )
 
-from qtpy.QtCore import Qt
-
-from enum import Enum, EnumMeta
+from enum import Enum
 import matplotlib as mpl
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import (
     FigureCanvasQTAgg as FigureCanvas
 )
 
-from widget_settings import Settings
+from widget_settings import Settings, Combo_box
 from corrections import Correct
 from backtrack import Backtrack
 from utils import (
@@ -44,84 +42,6 @@ class neighbours_choice_modes(Enum):
     n8 = 2
 
 
-class Combo_box():
-    ''' Auxiliary class to create an combobox. '''
-    def __init__(self, name='combo name',
-                 initial='_',
-                 choices=['_', 'one', 'two'],
-                 userdata=[],
-                 layout=None,
-                 width=150,
-                 write_function=None,
-                 read_function=None):
-        '''
-        Parameters
-        ----------
-        name : str
-            Name of the combobox and label shown on the corresponding widget.
-        initial : str
-            Initial value of the combox. The default is "_".
-        width : int
-            Width of the combobox. The default is 150.
-        choices : list(str) or Enum
-            Combobox choices.
-        userdata : list
-            Additional data stored in the combobox.
-        layout : QWidget
-            Parent QWidget layout where the combobox will be shown.
-            The default is None. Needs to be specified
-        write_function : function or method
-            Function/method that is executed on value change of the combobox
-        read_function : function or method
-            not implemented
-        '''
-        self.name = name
-        self.write_function = write_function
-        self.create_combo_box(name, choices, userdata, width, layout)
-        self.choices = choices
-
-    @property
-    def val(self):
-        return self.combo.currentIndex()
-
-    @property
-    def text(self):
-        _text = self.combo.currentText()
-        return str(_text)
-
-    @property
-    def current_data(self):
-        _data = self.combo.currentData()
-        return _data
-
-    def create_combo_box(self, name, choices, userdata, width, layout):
-        combo = QComboBox()
-        if type(choices) is list:  
-            choices_names = choices
-        elif type(choices) is EnumMeta:
-            choices_names = choices._member_names_
-            userdata = list(choices._value2member_map_.keys())
-        assert len(userdata) in (0, len(choices_names)), f'Uncorrect userdata in {self.name} Combobox'    
-        for idx, choice in enumerate(choices_names):
-            shown_text = choice.replace('_',' ')
-            if len(userdata) == len(choices):
-                data = userdata[idx]
-                combo.addItem(shown_text, userData=data)
-            else:
-                combo.addItem(shown_text)
-
-        comboLayout = QFormLayout()
-        comboLayout.setFormAlignment(Qt.AlignLeft)
-        lab = QLabel(name)
-        lab.setWordWrap(False)
-        comboLayout.addRow(combo, lab)
-        layout.addLayout(comboLayout)
-        if self.write_function is not None:
-            combo.currentIndexChanged.connect(self.write_function)
-        # combo.setFixedWidth(width)
-        self.combo = combo
-
-
 # TODO: Correct() as a class attribute? Right now it is created in each method
 def layer_container_and_selection(
         viewer=None,
@@ -134,7 +54,7 @@ def layer_container_and_selection(
     -------
     A tuple containing a QWidget for displaying the layer selection container,
     and a QWidget containing the selection options for the layer.
-    """ 
+    """
     layer_selection_container = QWidget()
     layer_selection_container.setLayout(QHBoxLayout())
     layer_selection_container.layout().addWidget(QLabel(container_name))

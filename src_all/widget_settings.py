@@ -137,9 +137,7 @@ class Settings():
 
 
 class Combo_box():
-    '''
-    Auxiliary class to create an combobox.
-    '''
+    ''' Auxiliary class to create an combobox. '''
     def __init__(self, name='combo name',
                  initial='_',
                  choices=['_', 'one', 'two'],
@@ -190,22 +188,20 @@ class Combo_box():
 
     def create_combo_box(self, name, choices, userdata, width, layout):
         combo = QComboBox()
-        if type(choices) is list:
+        if type(choices) is list:  
             choices_names = choices
         elif type(choices) is EnumMeta:
             choices_names = choices._member_names_
             userdata = list(choices._value2member_map_.keys())
-        assert len(userdata) in (0, len(choices_names)), f'Uncorrect userdata in {self.name} Combobox'
+        assert len(userdata) in (0, len(choices_names)), f'Uncorrect userdata in {self.name} Combobox'    
         for idx, choice in enumerate(choices_names):
-            shown_text = choice.replace('_', ' ')
+            shown_text = choice.replace('_',' ')
             if len(userdata) == len(choices):
                 data = userdata[idx]
                 combo.addItem(shown_text, userData=data)
             else:
                 combo.addItem(shown_text)
 
-        # combo.setEditable(True)
-        # combo.lineEdit().setAlignment(Qt.AlignCenter)
         comboLayout = QFormLayout()
         comboLayout.setFormAlignment(Qt.AlignLeft)
         lab = QLabel(name)
