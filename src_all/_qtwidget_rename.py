@@ -10,7 +10,7 @@ from qtpy.QtWidgets import (
     QWidget, QPushButton, QLineEdit,
     QRadioButton, QLabel,
     QButtonGroup, QGroupBox,
-    QMessageBox, QDialog, QSizePolicy,QFormLayout, QComboBox
+    QMessageBox, QDialog, QSizePolicy, QFormLayout, QComboBox
 )
 
 from qtpy.QtCore import Qt
@@ -30,22 +30,30 @@ from utils import (
     bin_3d,
 )
 
+
+DEBUG = True
+badPxDict = {
+    'Identify Hot pxs': 'hot',
+    'Identify Dead pxs': 'dead',
+    'Identify Both': 'both',
+}
+
+
 class neighbours_choice_modes(Enum):
     n4 = 1
     n8 = 2
 
+
 class Combo_box():
-    '''
-    Auxiliary class to create an combobox. 
-    '''
-    def __init__(self, name ='combo name',
-                 initial = '_',
-                 choices = ['_','one','two'],
-                 userdata = [],
-                 layout = None,
-                 width = 150,
-                 write_function = None,
-                 read_function = None):
+    ''' Auxiliary class to create an combobox. '''
+    def __init__(self, name='combo name',
+                 initial='_',
+                 choices=['_', 'one', 'two'],
+                 userdata=[],
+                 layout=None,
+                 width=150,
+                 write_function=None,
+                 read_function=None):
         '''
         Parameters
         ----------
@@ -71,21 +79,21 @@ class Combo_box():
         self.write_function = write_function
         self.create_combo_box(name, choices, userdata, width, layout)
         self.choices = choices
-    
-    @property    
+
+    @property
     def val(self):
         return self.combo.currentIndex()
-    
-    @property    
+
+    @property
     def text(self):
         _text = self.combo.currentText()
-        return str(_text) 
-    
-    @property 
+        return str(_text)
+
+    @property
     def current_data(self):
-            _data = self.combo.currentData()
-            return _data    
-       
+        _data = self.combo.currentData()
+        return _data
+
     def create_combo_box(self, name, choices, userdata, width, layout):
         combo = QComboBox()
         if type(choices) is list:  
@@ -93,7 +101,7 @@ class Combo_box():
         elif type(choices) is EnumMeta:
             choices_names = choices._member_names_
             userdata = list(choices._value2member_map_.keys())
-        assert len(userdata) in (0,len(choices_names)), f'Uncorrect userdata in {self.name} Combobox'    
+        assert len(userdata) in (0, len(choices_names)), f'Uncorrect userdata in {self.name} Combobox'    
         for idx, choice in enumerate(choices_names):
             shown_text = choice.replace('_',' ')
             if len(userdata) == len(choices):
@@ -102,29 +110,19 @@ class Combo_box():
             else:
                 combo.addItem(shown_text)
 
-        #combo.setEditable(True)
-        #combo.lineEdit().setAlignment(Qt.AlignCenter)
         comboLayout = QFormLayout()
         comboLayout.setFormAlignment(Qt.AlignLeft)
         lab = QLabel(name)
         lab.setWordWrap(False)
-        comboLayout.addRow(combo,lab)
+        comboLayout.addRow(combo, lab)
         layout.addLayout(comboLayout)
         if self.write_function is not None:
             combo.currentIndexChanged.connect(self.write_function)
         # combo.setFixedWidth(width)
         self.combo = combo
-        
+
+
 # TODO: Correct() as a class attribute? Right now it is created in each method
-
-DEBUG = True
-badPxDict = {
-    'Identify Hot pxs': 'hot',
-    'Identify Dead pxs': 'dead',
-    'Identify Both': 'both',
-}
-
-
 def layer_container_and_selection(
         viewer=None,
         layer_type=Image,
@@ -170,33 +168,44 @@ class PreprocessingnWidget(QWidget):
         # TODO: inplace and tracking needs to be taken care of here.
 
         original_image = self.image_layer_select.value
-        dark=self.dark_layer_select.value.data
-        bright=self.bright_layer_select.value.data
+        dark = self.dark_layer_select.value.data
+        bright = self.bright_layer_select.value.data
         data_corr = np.zeros(original_image.data.shape,
                             #  dtype=original_image.data.dtype, # I do not like not keeping the dtyp the same, but float operations do not work otherwise
                              )
         if self.flagBright.val:
             if self.flagDark.val and self.flagExp == 'Transmission':
                 data_corr = ((original_image.data - dark) /
-                              (bright - dark)).astype(np.float32)
-                # because it is float between 0-1, needs to be rescaled and casted to uint16
-                # check if the image has element greater than 1 or less than 0
+                             (bright - dark)).astype(np.float32)
+                # because it is float between 0-1, needs to be rescaled
+                # and casted to uint16 check if the image has element
+                # greater than 1 or less than 0
+                print('How the division works?', original_image.data.shape,
+                      bright.shape, dark.shape)
+
                 if np.amax(data_corr) > 1 or np.amin(data_corr) < 0:
                     self.messageBox.setText(
-                        'Image values out of range. Clipping to 0-1.')
-                data_corr = (np.clip(data_corr, 0, 1) * 65535).astype(np.uint16)
+                        'Dark included, image values out of range. Clipping to 0-1.',
+                        )
+                    print('Overflows', data_corr.min().compute(),
+                          data_corr.max().compute())
+                    data_corr = np.clip(data_corr, 0, 1)
+
+                data_corr = (data_corr * 65535).astype(np.uint16)
+
             elif self.flagExp == 'Emission':
                 # this is integer, no casting needed
                 data_corr = original_image.data - bright
             else:  # transmission, no dark correction
-                data_corr = original_image.data/bright
+                data_corr = original_image.data / bright
                 # because it is float between 0-1, needs to be rescaled and casted to uint16
                 # make sure that the image is between 0-1 first
                 if np.amax(data_corr) > 1 or np.amin(data_corr) < 0:
                     self.messageBox.setText(
-                        'Image values out of range. Clipping to 0-1.',
+                        'No dark, image values out of range. Clipping to 0-1.',
                         )
-                data_corr = (np.clip(data_corr, 0, 1) * 65535).astype(np.uint16)
+                    data_corr = np.clip(data_corr, 0, 1)
+                data_corr = (data_corr * 65535).astype(np.uint16)
 
         elif self.flagDark.val:  # only dark correction
             # this is integer, no casting needed
@@ -646,10 +655,10 @@ class PreprocessingnWidget(QWidget):
         groupbox2.setLayout(box2)
 
         # Hot pixel correction
-        self.neigh_mode = Combo_box(name = 'Mode', 
-                                    choices = neighbours_choice_modes, 
+        self.neigh_mode = Combo_box(name='Mode', 
+                                    choices=neighbours_choice_modes, 
                                     layout=box2,
-                                    write_function = self.reset_choices) #TODO check if reset_choices is correct
+                                    write_function=self.reset_choices) #TODO check if reset_choices is correct
         self.std_cutoff = Settings('Hot STD cutoff',
                                    dtype=int,
                                    initial=5,
@@ -734,7 +743,9 @@ class PreprocessingnWidget(QWidget):
         # -Log
         self.addButton(slayout, '-Log', self.calcLog)
 
-        slayout.addWidget(self.messageBox, stretch=True)
+        # TODO: set message bos scrollable or stretchable, this below does not work
+        slayout.setSizeConstraint(QVBoxLayout.SetNoConstraint)
+        slayout.addWidget(self.messageBox, stretch=3)
 
     def addButton(self, layout, button_name, call_function):
         button = QPushButton(button_name)
@@ -817,16 +828,16 @@ if __name__ == '__main__':
     if DEBUG:
         import glob
         # load example data from data folder
-        viewer.open('sample_data/corr_hot.tiff', name='hot')
-        viewer.open('sample_data/dark_field.tiff', name='dark')
-        viewer.open('sample_data/flat_field.tiff', name='bright')
+        viewer.open('src_all/sample_data/corr_hot.tiff', name='hot')
+        viewer.open('src_all/sample_data/dark_field.tiff', name='dark')
+        viewer.open('src_all/sample_data/flat_field.tiff', name='bright')
 
         # open OPT stack
-        # viewer.open(glob.glob('src_all/sample_data/16*'),
-        #             stack=True,
-        #             name='OPT data')
+        viewer.open(glob.glob('src_all/sample_data/16*'),
+                    stack=True,
+                    name='OPT data')
         # set image layer to OPT data
-        # optWidget.image_layer_select.value = viewer.layers['OPT data']
+        optWidget.image_layer_select.value = viewer.layers['OPT data']
         optWidget.hot_layer_select.value = viewer.layers['hot']
         optWidget.dark_layer_select.value = viewer.layers['dark']
         optWidget.bright_layer_select.value = viewer.layers['bright']
