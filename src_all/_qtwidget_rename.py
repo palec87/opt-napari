@@ -118,7 +118,7 @@ class PreprocessingnWidget(QWidget):
                 data_corr = original_image.data - bright
             else:  # transmission, no dark correction
                 data_corr = original_image.data / bright
-                # because it is float between 0-1, needs to be rescaled and casted to uint16
+                # this is float between 0-1, rescaled and cast to uint16
                 # make sure that the image is between 0-1 first
                 if np.amax(data_corr) > 1 or np.amin(data_corr) < 0:
                     self.messageBox.setText(
@@ -578,7 +578,7 @@ class PreprocessingnWidget(QWidget):
         self.neigh_mode = Combo_box(name='Mode', 
                                     choices=neighbours_choice_modes, 
                                     layout=box2,
-                                    write_function=self.reset_choices) #TODO check if reset_choices is correct
+                                    write_function=self.reset_choices)  # TODO check if reset_choices is correct
         self.std_cutoff = Settings('Hot STD cutoff',
                                    dtype=int,
                                    initial=5,
