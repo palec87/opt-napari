@@ -31,7 +31,7 @@ the same as the experimental exposure.
 """
 
 import numpy as np
-from utils import norm_img, img_to_int_type, is_positive
+from .utils import norm_img, img_to_int_type, is_positive
 
 
 class Correct():
@@ -84,6 +84,9 @@ class Correct():
             mode (str, optional): Mode of the hot pixel identification.
                 Defaults to 'hot'. Options are 'hot', 'dead' and 'both'.
         """
+        if self.hot is None:
+            raise ValueError('No hot pixel array provided')
+
         hot_pxs, dead_pxs = [], []
         self.mean = np.mean(self.hot, dtype=np.float64)
         self.std = np.std(self.hot, dtype=np.float64)
@@ -241,7 +244,7 @@ class Correct():
             else:
                 try:
                     # the same as above, run only once.
-                    self.bright_corr = self.correct_hot(self.bright_corr)
+                    self.bright_corr = self.correctBadPxs(self.bright_corr)
                 except TypeError:
                     pass
 
@@ -397,14 +400,14 @@ class Correct():
         self.bright_corr = self.correct_dark(self.bright)  # this could be done only once
 
         # step 2
-        self.bright_corr = self.correct_hot(self.bright_corr, mode=mode_hot)  # this too
+        self.bright_corr = self.correctBadPxs(self.bright_corr, mode=mode_hot)  # this too
         self.bright_corr = norm_img(self.bright_corr)
 
         # step 3
         self.img_corr = self.correct_bright(self.img_corr)
 
         # step 4
-        self.img_corr = self.correct_hot(self.img_corr)
+        self.img_corr = self.correctBadPxs(self.img_corr)
 
         # step 5, make sure it is the same integer type as original img.
         self.img_corr = img_to_int_type(self.img_corr, img_format)

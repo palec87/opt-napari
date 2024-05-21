@@ -23,8 +23,10 @@ __license__ = 'GPL'
     'arr_in, ULCorner, height, width, arr_out, roi_out',
     [(np.ones((5, 5)), (2, 2), 2, 2, np.ones((2, 2)), (2, 4, 2, 4)),
      (np.ones((5, 5)), (2, 2), 3, 3, np.ones((3, 3)), (2, 5, 2, 5)),
-     (np.ones((5, 5)), (2, 2), 4, 4, np.ones((3, 3)), (2, 5, 2, 5)),  # ROI beyond the image
-     (np.ones((5, 5)), (2, 2), 0, 0, np.ones((0, 0)), (2, 2, 2, 2)),  # empty ROI
+     # ROI beyond the image
+     (np.ones((5, 5)), (2, 2), 4, 4, np.ones((3, 3)), (2, 5, 2, 5)),
+     # empty ROI
+     (np.ones((5, 5)), (2, 2), 0, 0, np.ones((0, 0)), (2, 2, 2, 2)),
      ],
 )
 def test_select_roi(arr_in, ULCorner, height, width, arr_out, roi_out):
@@ -62,7 +64,8 @@ def test_select_roi_exceptions(arr_in, ULCorner, height, width, out):
     """
     Test function for the select_roi function with invalid inputs.
 
-    This function tests the select_roi function with invalid inputs and expects it to raise an error.
+    This function tests the select_roi function with invalid inputs and
+    expects it to raise an error.
 
     Parameters:
     - arr_in: Input array.
@@ -132,7 +135,8 @@ def test_norm_img(arr_in, ret_type, expected):
     - None
 
     Raises:
-    - AssertionError: If the output array dtype or values do not match the expected values.
+    - AssertionError: If the output array dtype or values do not match the
+        expected values.
     """
     out = norm_img(arr_in, ret_type)
     assert out.dtype == ret_type
@@ -159,7 +163,8 @@ def test_img2intType(arr_in, dtype, expected):
     - None
 
     Raises:
-    - AssertionError: If the output array dtype or values do not match the expected values.
+    - AssertionError: If the output array dtype or values do not match the
+        expected values.
     """
     out = img_to_int_type(arr_in, dtype)
     np.testing.assert_array_equal(out, expected)

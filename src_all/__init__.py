@@ -6,5 +6,3 @@ except ImportError:
 __author__ = "David Palecek"
 __credits__ = "Giorgia Tortora, Marcos Obando"
 __email__ = "dpalecek@ualg.pt"
-
-from ._qtwidget import PreprocessingnWidget
