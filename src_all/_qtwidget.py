@@ -211,7 +211,8 @@ class PreprocessingnWidget(QWidget):
                         'hot_pxs': hotPxs,
                         'dead_pxs': deadPxs,
                         }
-            data_corr = self.history.update_history(original_image, new_data)
+            data_corr = self.history.update_history(original_image,
+                                                    new_data)
 
         self.show_image(data_corr,
                         'Bad-px-corr_' + original_image.name,
@@ -663,7 +664,7 @@ class PreprocessingnWidget(QWidget):
         # -Log
         self.addButton(slayout, '-Log', self.calcLog)
 
-        # TODO: set message bos scrollable or stretchable, this below does not work
+        # TODO: set message bos scrollable or stretchable, this does not work
         slayout.setSizeConstraint(QVBoxLayout.SetNoConstraint)
         slayout.addWidget(self.messageBox, stretch=3)
 

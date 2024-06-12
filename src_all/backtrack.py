@@ -1,15 +1,10 @@
 import numpy as np
 from napari.layers import Image
 from napari.utils import notifications
+import warnings
 from enum import Enum
 
 from dataclasses import dataclass
-
-
-class update_modes(Enum):
-    inplace_track = (True, True)        # record history of last operation
-    inplace_NOtrack = (True, False)     # Inplace operations without tracking (dangerous)
-    NOinplace_NOtrack = (False, False)  # Creating copies no tracking needed
 
 
 @dataclass
@@ -38,14 +33,19 @@ class Backtrack:
             inplace_value (bool): if operation are inplace (saving RAM)
             track_value (bool): Track enables reverting the inplace operations
         """
+
+        # If values are not boolean, warn and return, no change to default
+        if not isinstance(inplace_value, bool) or not isinstance(track_value, bool):
+            warnings.warn('Boolean values expected.')
+            return
         self.inplace = inplace_value
         self.track = track_value
 
     def update_history(self, image: Image, data_dict: dict) -> np.ndarray:
-        """Updates history if trackiing and inplace operations are selected.
+        """Updates history if tracking and inplace operations are selected.
 
         Args:
-            image (Image): napari image .data atribute is the np.ndarray image
+            image (Image): napari image .data attribute is the np.ndarray image
             data_dict (dict): metadata and data for the operation to register
 
         Raises:
@@ -59,7 +59,7 @@ class Backtrack:
             self.raw_data = image.data
 
         # if no tracking, no update of history and return new image
-        if not self._update_compatible():
+        if self._update_compatible() is False:
             return data_dict['data']
 
         # DP: not that necessary check, can be removed I think
@@ -74,6 +74,8 @@ class Backtrack:
         self.history_item['data'] = image.data
         # for ROI selection
         if self.history_item['operation'] == 'roi':
+            # set current roi_def to history item (first time they are ()),
+            # and update roi_def after
             self.history_item['roi_def'] = self.roi_def
             self.update_roi_pars(data_dict['roi_def'])
 
