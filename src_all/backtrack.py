@@ -2,10 +2,9 @@ import numpy as np
 from napari.layers import Image
 from napari.utils import notifications
 import warnings
-from enum import Enum
+# from enum import Enum
 
-from dataclasses import dataclass
-
+from dataclasses import dataclass, field
 
 @dataclass
 class Backtrack:
@@ -14,18 +13,17 @@ class Backtrack:
     Can break if:
         You operate on more datasets in parallel
     """
-    raw_data: np.ndarray = None
-    roi_def: tuple = ()     # indices refer always to raw data
-    history_item = dict()   # operation, data, roi_def, bin_factor
 
+    raw_data: np.ndarray = None
+
+    # indices refer always to raw data
+    roi_def: tuple = field(default_factory=tuple)
+
+    # operation, data, roi_def, bin_factor
+    history_item: dict = field(default_factory=dict)
     inplace: bool = True
     track: bool = False
 
-    #############################
-    # DP: parts needs to stay, flags from checkbox updates can control behavior
-    #############################
-
-    # DP this will be changed
     def set_settings(self, inplace_value: bool, track_value: bool):
         """Global settings for inplace operations and tracking
 
@@ -70,8 +68,12 @@ class Backtrack:
 
         # compatible with update, I put old data to history item
         # and update current parameters in
+        # old keys may be hanging, so delete them first
+        if self.history_item != dict():
+            self.history_item = dict()
         self.history_item['operation'] = data_dict['operation']
         self.history_item['data'] = image.data
+
         # for ROI selection
         if self.history_item['operation'] == 'roi':
             # set current roi_def to history item (first time they are ()),
@@ -166,8 +168,9 @@ class Backtrack:
 
         # resetting history dictionary, because only 1 operation can be tracked
         data = self.history_item.pop('data')
+        operation = self.history_item.pop('operation')
         self.history_item = dict()
-        return data
+        return data, operation
 
     def revert_to_raw(self):
         self.history_item = dict()

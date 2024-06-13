@@ -313,6 +313,11 @@ class PreprocessingnWidget(QWidget):
             return
 
         original_image = self.image_layer_select.value
+
+        # evaluate maximum possible bin factor
+        if self.bin_factor.val > min(original_image.data.shape):
+            raise ValueError('Bin factor is too large for the image size.')
+
         binned_roi = bin_3d(original_image.data, self.bin_factor.val)
         notifications.show_info(
             f'Original shape: {original_image.data.shape},'
@@ -324,7 +329,8 @@ class PreprocessingnWidget(QWidget):
                         'data': binned_roi,
                         'bin_factor': self.bin_factor.val,
                         }
-            binned_roi = self.history.update_history(original_image, new_data)
+            binned_roi = self.history.update_history(original_image,
+                                                     new_data)
 
         self.show_image(binned_roi,
                         'binned_' + original_image.name,
@@ -358,8 +364,7 @@ class PreprocessingnWidget(QWidget):
         displayed image accordingly. If the history is empty, an info
         notification is shown.
         """
-        last_op = self.history.history_item['operation']
-        self.image_layer_select.value.data = self.history.undo()
+        self.image_layer_select.value.data, last_op = self.history.undo()
 
         # reset contrast limits
         self.image_layer_select.value.reset_contrast_limits()
@@ -614,6 +619,8 @@ class PreprocessingnWidget(QWidget):
         groupboxInt = QGroupBox('Intensity correction')
         boxInt = QVBoxLayout()
         groupboxInt.setLayout(boxInt)
+
+        # rectangle size of the corner of the image used for int calc
         self.rectSize = Settings('Rectangle size',
                                  dtype=int,
                                  initial=50,
