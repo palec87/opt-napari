@@ -1,6 +1,7 @@
 import pytest
 import numpy as np
 from ..backtrack import Backtrack
+from pytestqt import qtbot
 
 
 @pytest.fixture(scope='function')
@@ -51,6 +52,54 @@ def backtrack_1_0():
     del backtrack
 
 
+@pytest.fixture
+def prepare_widget_data1(make_napari_viewer, request):
+    from napari import Viewer
+    from _qtwidget import PreprocessingnWidget as pw
+
+    viewer: Viewer = make_napari_viewer()
+
+    _widget = pw(viewer)
+    viewer.window.add_dock_widget(_widget, area='right')
+
+    img, dark, bright, bad = request.getfixturevalue('data1')
+
+    viewer.add_image(img, name='img')
+    _widget.image_layer_select.value = viewer.layers['img']
+
+    viewer.add_image(dark, name='dark')
+    _widget.dark_layer_select.value = viewer.layers['dark']
+    viewer.add_image(bright, name='bright')
+    _widget.bright_layer_select.value = viewer.layers['bright']
+    viewer.add_image(bad, name='bad')
+    _widget.hot_layer_select.value = viewer.layers['bad']
+    return viewer, _widget
+
+
+@pytest.fixture
+def prepare_widget_data2(make_napari_viewer, request):
+    from napari import Viewer
+    from _qtwidget import PreprocessingnWidget as pw
+
+    viewer: Viewer = make_napari_viewer()
+
+    _widget = pw(viewer)
+    viewer.window.add_dock_widget(_widget, area='right')
+
+    img, dark, bright, bad = request.getfixturevalue('data2')
+
+    viewer.add_image(img, name='img')
+    _widget.image_layer_select.value = viewer.layers['img']
+
+    viewer.add_image(dark, name='dark')
+    _widget.dark_layer_select.value = viewer.layers['dark']
+    viewer.add_image(bright, name='bright')
+    _widget.bright_layer_select.value = viewer.layers['bright']
+    viewer.add_image(bad, name='bad')
+    _widget.hot_layer_select.value = viewer.layers['bad']
+    return viewer, _widget
+
+
 # fixture for image layer, dark and bright layer and bad pixel layer
 @pytest.fixture(scope='function')
 def data1():
@@ -74,17 +123,33 @@ def data2():
     return img, dark, bright, bad_px
 
 
-# @pytest.fixture(scope='module', params=[
-#         ({'inplace': True, 'track': False}),
-#         ({'inplace': None, 'track': None}),
-#         ({'inplace': True, 'track': True}),
-#         ({'inplace': False, 'track': True}),
-#         ({'inplace': False, 'track': False}),
-#         ({'inplace': 1, 'track': 0}),
-#     ])
-# def backtrack(request):
-#     backtrack = Backtrack()
-#     backtrack.set_settings(request.param['inplace'],
-#                            request.param['track'],
-#                            )
-#     return backtrack
+# @pytest.yield_fixture(scope="module")
+# def qtbot_session(qapp, request):
+#     print("  SETUP qtbot")
+#     result = QtBot(qapp)
+#     with capture_exceptions() as exceptions:
+#         yield result
+#     print("  TEARDOWN qtbot")
+
+
+# @pytest.fixture(scope="module")
+# def Viewer(request):
+#     from qtpy import QtWidgets, QtCore, QtTest
+#     print("  SETUP GUI")
+
+#     app, imageViewer = GUI.main_GUI()
+#     qtbotbis = QtBot(app)
+#     QtTest.QTest.qWait(0.5 * 1000)
+
+#     yield app, imageViewer, qtbotbis
+
+#     def handle_dialog():
+#         messagebox = QtWidgets.QApplication.activeWindow()
+#         # or
+#         # messagebox = imageViewer.findChild(QtWidgets.QMessageBox)
+#         yes_button = messagebox.button(QtWidgets.QMessageBox.Yes)
+#         qtbotbis.mouseClick(yes_button, QtCore.Qt.LeftButton, delay=1)
+
+#     QtCore.QTimer.singleShot(100, handle_dialog)
+#     qtbotbis.mouseClick(imageViewer.btn_quit, QtCore.Qt.LeftButton, delay=1)
+#     assert imageViewer.isHidden()

@@ -5,60 +5,12 @@ Tests for backtrack class
 """
 
 import pytest
-# from napari import Viewer
 import numpy as np
 
 
 __author__ = 'David Palecek'
 __credits__ = ['Teresa M Correia', 'Giorgia Tortora']
 __license__ = 'GPL'
-
-
-@pytest.fixture
-def prepare_widget_data1(make_napari_viewer, request):
-    from napari import Viewer
-    from _qtwidget import PreprocessingnWidget as pw
-
-    viewer: Viewer = make_napari_viewer()
-
-    _widget = pw(viewer)
-    viewer.window.add_dock_widget(_widget, area='right')
-
-    img, dark, bright, bad = request.getfixturevalue('data1')
-
-    viewer.add_image(img, name='img')
-    _widget.image_layer_select.value = viewer.layers['img']
-
-    viewer.add_image(dark, name='dark')
-    _widget.dark_layer_select.value = viewer.layers['dark']
-    viewer.add_image(bright, name='bright')
-    _widget.bright_layer_select.value = viewer.layers['bright']
-    viewer.add_image(bad, name='bad')
-    _widget.hot_layer_select.value = viewer.layers['bad']
-    return viewer, _widget
-
-@pytest.fixture
-def prepare_widget_data2(make_napari_viewer, request):
-    from napari import Viewer
-    from _qtwidget import PreprocessingnWidget as pw
-
-    viewer: Viewer = make_napari_viewer()
-
-    _widget = pw(viewer)
-    viewer.window.add_dock_widget(_widget, area='right')
-
-    img, dark, bright, bad = request.getfixturevalue('data2')
-
-    viewer.add_image(img, name='img')
-    _widget.image_layer_select.value = viewer.layers['img']
-
-    viewer.add_image(dark, name='dark')
-    _widget.dark_layer_select.value = viewer.layers['dark']
-    viewer.add_image(bright, name='bright')
-    _widget.bright_layer_select.value = viewer.layers['bright']
-    viewer.add_image(bad, name='bad')
-    _widget.hot_layer_select.value = viewer.layers['bad']
-    return viewer, _widget
 
 
 @pytest.mark.parametrize(

@@ -126,11 +126,11 @@ class PreprocessingnWidget(QWidget):
                 data_corr = self.clip_and_convert_data(data_corr)
 
             elif self.flagExp == 'Emission':
-                # this is integer, no casting needed
-                # however can go to negative values
+                # make sure accidental floats are handled
                 data_corr = self.subtract_images(original_image.data, bright)
                 # get rid of potential negative values
                 data_corr = np.clip(data_corr, 0, None).astype(np.uint16)
+
             else:  # transmission, no dark correction
                 data_corr = original_image.data / bright
                 # this is float between 0-1, rescaled and cast to uint16
@@ -183,12 +183,12 @@ class PreprocessingnWidget(QWidget):
         dlg.setWindowTitle("Bad Pixel correction")
         dlg.setText("Do you want to correct all those pixels! \n"
                     "It can take a while. \n"
-                    f"{len(hotPxs)} + {len(deadPxs)}")
+                    f"N_hot: {len(hotPxs)} + N_dead: {len(deadPxs)}")
         dlg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-        button = dlg.exec()
+        self.button = dlg.exec()
 
         # yes/no dialog to ask if the user wants to correct the hot pixels
-        if button == QMessageBox.No:
+        if self.button == QMessageBox.No:
             # display bad pixels
             data_corr = np.zeros(self.hot_layer_select.value.data.shape,
                                  dtype=original_image.data.dtype)
@@ -198,7 +198,7 @@ class PreprocessingnWidget(QWidget):
             for _i, (y, x) in enumerate(deadPxs):
                 data_corr[y, x] = 101
             self.show_image(data_corr,
-                            'Bad_pixels_' + self.hot_layer_select.value.name,
+                            'Bad-pixels_' + self.hot_layer_select.value.name,
                             # self.hot_layer_select.value.contrast_limits,
                             )
             return
