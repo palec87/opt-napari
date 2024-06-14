@@ -6,4 +6,3 @@ dask
 napari
 magicgui
 pytest
-pytest-qt

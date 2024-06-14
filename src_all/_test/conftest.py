@@ -1,7 +1,6 @@
 import pytest
 import numpy as np
 from ..backtrack import Backtrack
-from pytestqt import qtbot
 
 
 @pytest.fixture(scope='function')
