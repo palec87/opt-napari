@@ -81,6 +81,29 @@ class PreprocessingnWidget(QWidget):
         # here I update history instance flags
         self.updateHistoryFlags()
 
+    def clip_and_convert_data(self, data_corr):
+        if np.amax(data_corr) > 1 or np.amin(data_corr) < 0:
+            self.messageBox.setText(
+                'Dark included, image values out of range. Clipping to 0-1.',
+            )
+            print('Overflows', data_corr.min(), data_corr.max())
+            data_corr = np.clip(data_corr, 0, 1)
+
+        data_corr = (data_corr * 65535).astype(np.uint16)
+        return data_corr
+
+    def subtract_images(self, image, corr):
+        if (not np.issubdtype(image.dtype, np.integer) or
+                not np.issubdtype(corr.dtype, np.integer)):
+            self.messageBox.setText(
+                'Either data or corr is not np.integer type.',
+            )
+
+            data_corr = np.round((image - corr.clip(None, image))).astype(np.uint16)
+        else:
+            data_corr = image - corr
+        return data_corr
+
     def correctDarkBright(self):
         # display message in the message box
         self.messageBox.setText('Correcting Dark and Bright')
@@ -90,57 +113,41 @@ class PreprocessingnWidget(QWidget):
         original_image = self.image_layer_select.value
         dark = self.dark_layer_select.value.data
         bright = self.bright_layer_select.value.data
-        data_corr = np.zeros(original_image.data.shape,
-                            #  dtype=original_image.data.dtype, # I do not like not keeping the dtyp the same, but float operations do not work otherwise
+        data_corr = np.empty(original_image.data.shape,
+                             #  dtype=original_image.data.dtype, # I do not like not keeping the dtyp the same, but float operations do not work otherwise
                              )
         if self.flagBright.val:
             if self.flagDark.val and self.flagExp == 'Transmission':
                 data_corr = ((original_image.data - dark) /
-                             (bright - dark)).astype(np.float32)
+                             (bright - dark))
                 # because it is float between 0-1, needs to be rescaled
                 # and casted to uint16 check if the image has element
                 # greater than 1 or less than 0
-                print('How the division works?', original_image.data.shape,
-                      bright.shape, dark.shape)
-
-                if np.amax(data_corr) > 1 or np.amin(data_corr) < 0:
-                    self.messageBox.setText(
-                        'Dark included, image values out of range. Clipping to 0-1.',
-                        )
-                    print('Overflows', data_corr.min().compute(),
-                          data_corr.max().compute())
-                    data_corr = np.clip(data_corr, 0, 1)
-
-                data_corr = (data_corr * 65535).astype(np.uint16)
+                data_corr = self.clip_and_convert_data(data_corr)
 
             elif self.flagExp == 'Emission':
                 # this is integer, no casting needed
-                data_corr = original_image.data - bright
+                # however can go to negative values
+                data_corr = self.subtract_images(original_image.data, bright)
+                # get rid of potential negative values
+                data_corr = np.clip(data_corr, 0, None).astype(np.uint16)
             else:  # transmission, no dark correction
                 data_corr = original_image.data / bright
                 # this is float between 0-1, rescaled and cast to uint16
                 # make sure that the image is between 0-1 first
-                if np.amax(data_corr) > 1 or np.amin(data_corr) < 0:
-                    self.messageBox.setText(
-                        'No dark, image values out of range. Clipping to 0-1.',
-                        )
-                    data_corr = np.clip(data_corr, 0, 1)
-                data_corr = (data_corr * 65535).astype(np.uint16)
+                data_corr = self.clip_and_convert_data(data_corr)
 
-        elif self.flagDark.val:  # only dark correction
-            # this is integer, no casting needed
-            data_corr = original_image.data - dark
+        elif self.flagDark.val:  # only dark correction for both Tr and Em
+            # if not integer, cast to int16
+            data_corr = self.subtract_images(original_image.data, dark)
         else:
-            self.messageBox.setText(
-                'No correction selected.',
-                )
-            data_corr = original_image.data
+            self.messageBox.setText('No correction selected.')
+            data_corr = original_image.data.astype(np.uint16)
 
         # history update
         if self.history.inplace:
             new_data = {'operation': 'corrDB',
-                        'data': data_corr,
-                        }
+                        'data': data_corr}
             data_corr = self.history.update_history(original_image,
                                                     new_data)
 

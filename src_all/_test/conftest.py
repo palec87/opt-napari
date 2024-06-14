@@ -55,10 +55,22 @@ def backtrack_1_0():
 @pytest.fixture(scope='function')
 def data1():
     img = np.ones((10, 5, 5)) * 10
-    dark = np.zeros((5, 5)) * 0.1
-    bright = np.ones((5, 5)) * 0.9
-    bad_px = np.zeros((5, 5))
-    bad_px[1, 1] = 10
+    dark = np.ones((5, 5)) * 0.1
+    bright = np.ones((5, 5)) * 11
+    bad_px = np.ones((5, 5)) * 0.1
+    bad_px[2, 1] = 10
+    return img, dark, bright, bad_px
+
+
+# fixture for image layer, dark and bright layer and bad pixel layer
+# Not very reasonable but kinda valid
+@pytest.fixture(scope='function')
+def data2():
+    img = np.ones((10, 5, 5)) * 10
+    dark = np.ones((5, 5)) * 0.1
+    bright = np.ones((5, 5)) * 8.8
+    bad_px = np.ones((5, 5)) * 0.1
+    bad_px[2, 1] = 10
     return img, dark, bright, bad_px
 
 

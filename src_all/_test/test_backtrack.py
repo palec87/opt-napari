@@ -9,7 +9,6 @@ from napari import Viewer
 import numpy as np
 
 
-
 __author__ = 'David Palecek'
 __credits__ = ['Teresa M Correia', 'Giorgia Tortora']
 __license__ = 'GPL'
@@ -75,12 +74,8 @@ class TestClass:
         img_new = np.ones((2, 2))
         viewer: Viewer = make_napari_viewer()
         viewer.add_image(img_old, name='test')
-        data_dict = {'operation': 'roi',
-                     'data': img_new,
-                     'roi_def': (1, 1, 3, 3),
-                     }
-        out = backtrack.update_history(viewer.layers['test'],
-                                       data_dict)
+        data_dict = {'operation': 'roi', 'data': img_new, 'roi_def': (1, 1, 3, 3)}
+        out = backtrack.update_history(viewer.layers['test'], data_dict)
 
         assert np.array_equal(out, data_dict['data'])
         assert np.array_equal(backtrack.raw_data, viewer.layers['test'].data)
@@ -107,8 +102,8 @@ def test_update_history_bin1(make_napari_viewer, backtrack_init,
     assert backtrack.history_item == {}
     assert backtrack._update_compatible() is expected[0]
 
-    img_old = input_vals[0]
-    img_new = np.ones((2, 2)) * input_vals[1]
+    img_old, binned_value = input_vals
+    img_new = np.ones((2, 2)) * binned_value
 
     viewer: Viewer = make_napari_viewer()
     viewer.add_image(img_old, name='test')
@@ -353,3 +348,8 @@ def test_undo_roi(make_napari_viewer, backtrack_init, input_vals,
     _widget.undoHistory()
     assert np.array_equal(viewer.layers['img'].data, expected[1]['data'])
     assert _widget.history.history_item == {}
+
+    # continue with binning or second roi selection
+    _widget.bin_factor.val = 2
+    _widget.bin_stack()
+    assert np.array_equal(viewer.layers['img'].data, np.ones((10, 2, 2)) * 10)
