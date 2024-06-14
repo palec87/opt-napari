@@ -5,3 +5,5 @@ qtpy
 dask
 napari
 magicgui
+pytest
+pytestqt
