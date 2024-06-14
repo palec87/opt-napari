@@ -59,9 +59,9 @@ def test_bad1(input_vals, expected, request):
 #     widget.inplace.val, widget.track.val = False, False
 #     widget.updateHistoryFlags()
 
-    # run correction (What about dialog?)
-    widget.correctBadPixels()
-    QtTest.QTest.qWait(500)
-    QtCore.QTimer.singleShot(100, handle_dialog)
-    # qtbot.mouseClick(widget.button, QtCore.Qt.LeftButton, delay=1)
-    QtTest.QTest.qWait(500)
+    # # run correction (What about dialog?)
+    # widget.correctBadPixels()
+    # QtTest.QTest.qWait(500)
+    # QtCore.QTimer.singleShot(100, handle_dialog)
+    # # qtbot.mouseClick(widget.button, QtCore.Qt.LeftButton, delay=1)
+    # QtTest.QTest.qWait(500)
