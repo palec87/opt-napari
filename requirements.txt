@@ -1,8 +1,0 @@
-napari-plugin-engine>=0.1.4
-numpy>=1.21,<=1.23.5
-matplotlib
-qtpy
-dask
-napari
-magicgui
-pytest
