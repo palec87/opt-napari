@@ -11,6 +11,7 @@ from qtpy.QtWidgets import (
     QRadioButton, QLabel,
     QButtonGroup, QGroupBox,
     QMessageBox, QDialog, QSizePolicy,
+    QTabWidget,
 )
 
 from enum import Enum
@@ -543,10 +544,12 @@ class PreprocessingnWidget(QWidget):
         self.messageBox.setText('Messages')
 
         # Linear structure to impose correct order
-        groupbox1 = QGroupBox('Dark/Bright Correction')
+        tabsCorr = QTabWidget()
+
+        groupboxDark = QGroupBox('Dark/Bright Correction')
         boxAll = QVBoxLayout()
         boxExp = QHBoxLayout()
-        groupbox1.setLayout(boxAll)
+        groupboxDark.setLayout(boxAll)
 
         # create QradioButtons
         groupExpMode = QButtonGroup(self)
@@ -557,7 +560,7 @@ class PreprocessingnWidget(QWidget):
         groupExpMode.addButton(transExp)
         boxExp.addWidget(transExp)
 
-        emlExp = QRadioButton('Emmision')
+        emlExp = QRadioButton('Emission')
         groupExpMode.addButton(emlExp)
         boxExp.addWidget(emlExp)
         boxAll.addLayout(boxExp)
@@ -579,25 +582,27 @@ class PreprocessingnWidget(QWidget):
                                    write_function=self.set_preprocessing)
         boxAll.addLayout(boxInclude)
         # Now comes button
-        self.addButton(boxAll, 'Correct Dark+Bringht', self.correctDarkBright)
-        slayout.addWidget(groupbox1)
+        self.addButton(boxAll, 'Correct Dark + Bright', self.correctDarkBright)
+        tabsCorr.addTab(groupboxDark, 'Dark/Bright')
 
+        # create a qtab widget for the bad pixel correction
         # create a groupbox for hot pixel correction
-        groupbox2 = QGroupBox('Bad pixels correction')
-        box2 = QVBoxLayout()
-        groupbox2.setLayout(box2)
+        groupboxBad = QGroupBox('Bad pixels correction')
+        boxBad = QVBoxLayout()
+        groupboxBad.setLayout(boxBad)
 
         # Hot pixel correction
-        self.neigh_mode = Combo_box(name='Mode', 
-                                    choices=neighbours_choice_modes, 
-                                    layout=box2,
-                                    write_function=self.reset_choices)  # TODO check if reset_choices is correct
+        self.neigh_mode = Combo_box(name='Mode',
+                                    choices=neighbours_choice_modes,
+                                    layout=boxBad,
+                                    write_function=self.reset_choices,
+                                    )  # TODO check if reset_choices is correct
         self.std_cutoff = Settings('Hot STD cutoff',
                                    dtype=int,
                                    initial=5,
                                    vmin=1,
                                    vmax=20,
-                                   layout=box2,
+                                   layout=boxBad,
                                    write_function=self.set_preprocessing)
 
         groupBadPxMode = QButtonGroup(self)
@@ -606,22 +611,23 @@ class PreprocessingnWidget(QWidget):
         flagGetHot = QRadioButton('Identify Hot pxs')
         flagGetHot.setChecked(True)
         groupBadPxMode.addButton(flagGetHot)
-        box2.addWidget(flagGetHot)
+        boxBad.addWidget(flagGetHot)
 
         flagGetDead = QRadioButton('Identify Dead pxs')
         groupBadPxMode.addButton(flagGetDead)
-        box2.addWidget(flagGetDead)
+        boxBad.addWidget(flagGetDead)
 
         flagGetBoth = QRadioButton('Identify Both')
         groupBadPxMode.addButton(flagGetBoth)
-        box2.addWidget(flagGetBoth)
+        boxBad.addWidget(flagGetBoth)
 
         self.updateBadPixelsMode(groupBadPxMode.checkedButton())
 
-        self.addButton(box2, 'Hot pixel correction', self.correctBadPixels)
-        slayout.addWidget(groupbox2)
+        self.addButton(boxBad, 'Hot pixel correction', self.correctBadPixels)
+        # tabBadPixels.addTab(groupboxBad, 'Bad pixels')
+        # slayout.addWidget(tabBadPixels)
+        tabsCorr.addTab(groupboxBad, 'Bad pixels')
 
-        # Intensity correction
         # create a groupbox for Intensity correction
         groupboxInt = QGroupBox('Intensity correction')
         boxInt = QVBoxLayout()
@@ -636,9 +642,11 @@ class PreprocessingnWidget(QWidget):
                                  layout=boxInt,
                                  write_function=self.set_preprocessing)
         self.addButton(boxInt, 'Intensity correction', self.correctIntensity)
-        slayout.addWidget(groupboxInt)
+        tabsCorr.addTab(groupboxInt, 'Intensity Corr')
+        slayout.addWidget(tabsCorr)
 
         # select ROI
+        tabProcess = QTabWidget()
         groupboxRoi = QGroupBox('ROI selection')
         boxRoi = QVBoxLayout()
         groupboxRoi.setLayout(boxRoi)
@@ -658,7 +666,7 @@ class PreprocessingnWidget(QWidget):
                                   layout=boxRoi,
                                   write_function=self.set_preprocessing)
         self.addButton(boxRoi, 'Select ROI', self.select_ROIs)
-        slayout.addWidget(groupboxRoi)
+        tabProcess.addTab(groupboxRoi, 'ROI')
 
         # binning
         groupboxBin = QGroupBox('Binning')
@@ -673,14 +681,23 @@ class PreprocessingnWidget(QWidget):
                                    layout=boxBin,
                                    write_function=self.set_preprocessing)
         self.addButton(boxBin, 'Bin Stack', self.bin_stack)
-        slayout.addWidget(groupboxBin)
+        tabProcess.addTab(groupboxBin, 'Binning')
 
         # -Log
-        self.addButton(slayout, '-Log', self.calcLog)
+        groupboxLog = QGroupBox('Log')
+        boxLog = QVBoxLayout()
+        groupboxBin.setLayout(boxLog)
+
+        self.addButton(boxLog, '-Log', self.calcLog)
+        tabProcess.addTab(groupboxLog, 'Log')
+
+        # Adding tabs to the layout
+        slayout.addWidget(tabProcess)
 
         # TODO: set message bos scrollable or stretchable, this does not work
-        slayout.setSizeConstraint(QVBoxLayout.SetNoConstraint)
         slayout.addWidget(self.messageBox, stretch=3)
+        # slayout.addWidget(self.messageBox, rowspan=3)
+        slayout.setSizeConstraint(QVBoxLayout.SetNoConstraint)
 
     def addButton(self, layout, button_name, call_function):
         button = QPushButton(button_name)
