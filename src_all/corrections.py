@@ -149,6 +149,7 @@ class Correct():
 
         # check if the shapes of the correction and image match
         if self.hot.shape != img.shape:
+            print(self.hot.shape, img.shape)
             raise IndexError('images do not have the same shape')
 
         # define neighbours
