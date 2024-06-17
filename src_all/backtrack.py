@@ -42,10 +42,10 @@ class Backtrack:
         self.track = track_value
 
     def update_history(self, image: Image, data_dict: dict) -> np.ndarray:
-        """Updates history if trackiing and inplace operations are selected.
+        """Updates history if tracking and inplace operations are selected.
 
         Args:
-            image (Image): napari image .data atribute is the np.ndarray image
+            image (Image): napari image .data attribute is the np.ndarray image
             data_dict (dict): metadata and data for the operation to register
 
         Raises:
@@ -130,7 +130,7 @@ class Backtrack:
         if self.history_item == dict():
             raise ValueError('No State to revert to.')
 
-        # this is completely useles I think
+        # this is completely useless I think
         if self.history_item['operation'] == 'roi':
             notifications.show_info('Reverting ROI selection')
             self.roi_def = self.history_item['roi_def']
