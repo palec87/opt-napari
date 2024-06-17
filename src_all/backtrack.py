@@ -1,16 +1,10 @@
 import numpy as np
 from napari.layers import Image
 from napari.utils import notifications
-from enum import Enum
+import warnings
+# from enum import Enum
 
-from dataclasses import dataclass
-
-
-class update_modes(Enum):
-    inplace_track = (True, True)        # record history of last operation
-    inplace_NOtrack = (True, False)     # Inplace operations without tracking (dangerous)
-    NOinplace_NOtrack = (False, False)  # Creating copies no tracking needed
-
+from dataclasses import dataclass, field
 
 @dataclass
 class Backtrack:
@@ -19,18 +13,17 @@ class Backtrack:
     Can break if:
         You operate on more datasets in parallel
     """
-    raw_data: np.ndarray = None
-    roi_def: tuple = ()     # indices refer always to raw data
-    history_item = dict()   # operation, data, roi_def, bin_factor
 
+    raw_data: np.ndarray = None
+
+    # indices refer always to raw data
+    roi_def: tuple = field(default_factory=tuple)
+
+    # operation, data, roi_def, bin_factor
+    history_item: dict = field(default_factory=dict)
     inplace: bool = True
     track: bool = False
 
-    #############################
-    # DP: parts needs to stay, flags from checkbox updates can control behavior
-    #############################
-
-    # DP this will be changed
     def set_settings(self, inplace_value: bool, track_value: bool):
         """Global settings for inplace operations and tracking
 
@@ -38,6 +31,11 @@ class Backtrack:
             inplace_value (bool): if operation are inplace (saving RAM)
             track_value (bool): Track enables reverting the inplace operations
         """
+
+        # If values are not boolean, warn and return, no change to default
+        if not isinstance(inplace_value, bool) or not isinstance(track_value, bool):
+            warnings.warn('Boolean values expected.')
+            return
         self.inplace = inplace_value
         self.track = track_value
 
@@ -59,7 +57,7 @@ class Backtrack:
             self.raw_data = image.data
 
         # if no tracking, no update of history and return new image
-        if not self._update_compatible():
+        if self._update_compatible() is False:
             return data_dict['data']
 
         # DP: not that necessary check, can be removed I think
@@ -70,10 +68,16 @@ class Backtrack:
 
         # compatible with update, I put old data to history item
         # and update current parameters in
+        # old keys may be hanging, so delete them first
+        if self.history_item != dict():
+            self.history_item = dict()
         self.history_item['operation'] = data_dict['operation']
         self.history_item['data'] = image.data
+
         # for ROI selection
         if self.history_item['operation'] == 'roi':
+            # set current roi_def to history item (first time they are ()),
+            # and update roi_def after
             self.history_item['roi_def'] = self.roi_def
             self.update_roi_pars(data_dict['roi_def'])
 
@@ -164,8 +168,9 @@ class Backtrack:
 
         # resetting history dictionary, because only 1 operation can be tracked
         data = self.history_item.pop('data')
+        operation = self.history_item.pop('operation')
         self.history_item = dict()
-        return data
+        return data, operation
 
     def revert_to_raw(self):
         self.history_item = dict()
