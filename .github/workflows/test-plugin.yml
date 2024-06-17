@@ -58,8 +58,8 @@ jobs:
       shell: bash -l {0}
       run: |
         python --version
-        conda install -y pyopencl hdbscan pip setuptools wheel pytest pytest-cov pytest-benchmark pytest-qt pyqt pytest-xvfb pandas
-        # pip install setuptools tox tox-gh-actions
+        conda install -y pyopencl hdbscan pip setuptools wheel napari pytest pytest-cov pytest-benchmark pytest-qt pyqt pytest-xvfb
+        # pip install setuptools tox tox-gh-actions 
 
         pip install -e .
     - name: Test with pytest
