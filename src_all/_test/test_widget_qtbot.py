@@ -12,26 +12,29 @@ import numpy as np
 ######################
 # Correct Bad Pixels #
 ######################
-@pytest.mark.parametrize(
-    'input_vals, expected',
-    [({'flagBad': 'hot', 'std': 1}, np.ones((10, 5, 5)) * 10),
-     ({'flagBad': 'dead', 'std': 1}, np.ones((10, 5, 5)) * 10),
-     ({'flagBad': 'both', 'std': 1}, np.ones((10, 5, 5)) * 10),
-     ],
-)
-def test_bad1(input_vals, expected, request):
-    _, widget = request.getfixturevalue("prepare_widget_data1")
+# this works but needs clicks in the dialog, so not compatible with GH actions.
+# @pytest.mark.parametrize(
+#     'input_vals, expected',
+#     [({'flagBad': 'hot', 'std': 1}, np.ones((10, 5, 5)) * 10),
+#      ({'flagBad': 'dead', 'std': 1}, np.ones((10, 5, 5)) * 10),
+#      ({'flagBad': 'both', 'std': 1}, np.ones((10, 5, 5)) * 10),
+#      ],
+# )
+# def test_bad1(input_vals, expected, request):
+#     _, widget = request.getfixturevalue("prepare_widget_data1")
 
-    widget.flagBad = input_vals['flagBad']
-    widget.std_cutoff.val = input_vals['std']
+#     widget.flagBad = input_vals['flagBad']
+#     widget.std_cutoff.val = input_vals['std']
 
-    widget.inplace.val, widget.track.val = False, False
-    widget.updateHistoryFlags()
+#     widget.inplace.val, widget.track.val = False, False
+#     widget.updateHistoryFlags()
 
-    # run correction (What about dialog?)
-    widget.correctBadPixels()
+#     # run correction (What about dialog?)
+#     widget.correctBadPixels()
 
 
+#################################
+# trial which does not work yet #
 # with qtbot does not work at all
 # @pytest.mark.parametrize(
 #     'input_vals, expected',
