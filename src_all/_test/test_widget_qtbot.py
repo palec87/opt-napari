@@ -7,64 +7,38 @@ a dialog window
 
 import pytest
 import numpy as np
+from qtpy.QtWidgets import QMessageBox
+
+ans = np.zeros((5, 5))
+ans1 = np.zeros((5, 5))
+ans1[2, 1] = 1
+
+# dead pixel should be identified too
+ans2 = ans1.copy()
+ans2[1, 2] = 0.1
 
 
-######################
-# Correct Bad Pixels #
-######################
-# this works but needs clicks in the dialog, so not compatible with GH actions.
-# @pytest.mark.parametrize(
-#     'input_vals, expected',
-#     [({'flagBad': 'hot', 'std': 1}, np.ones((10, 5, 5)) * 10),
-#      ({'flagBad': 'dead', 'std': 1}, np.ones((10, 5, 5)) * 10),
-#      ({'flagBad': 'both', 'std': 1}, np.ones((10, 5, 5)) * 10),
-#      ],
-# )
-# def test_bad1(input_vals, expected, request):
-#     _, widget = request.getfixturevalue("prepare_widget_data1")
+@pytest.mark.parametrize(
+    'init_vals, expected',
+    [((False, False, 2, 'hot'), ((5, 5), ans1)),
+     ((False, True, 2, 'hot'), ((5, 5), ans1)),
+     ((False, True, 5, 'hot'), ((5, 5), ans)),
+     ((True, True, 2, 'hot'), ((5, 5), ans1)),
+     ((True, False, 2, 'hot'), ((5, 5), ans1)),
+     ((True, True, 5, 'hot'), ((5, 5), ans)),
+     ],
+)
+def test_bad_pixels1_no_corr(init_vals, expected, request, monkeypatch):
+    viewer, widget = request.getfixturevalue("prepare_widget_data1")
 
-#     widget.flagBad = input_vals['flagBad']
-#     widget.std_cutoff.val = input_vals['std']
+    widget.inplace.val, widget.track.val = init_vals[0], init_vals[1]
+    widget.std_cutoff.val = init_vals[2]
+    widget.flagBad = init_vals[3]
 
-#     widget.inplace.val, widget.track.val = False, False
-#     widget.updateHistoryFlags()
+    monkeypatch.setattr(widget, "ask_correct_bad_pixels",
+                        lambda *args: QMessageBox.No)
 
-#     # run correction (What about dialog?)
-#     widget.correctBadPixels()
-
-
-#################################
-# trial which does not work yet #
-# with qtbot does not work at all
-# @pytest.mark.parametrize(
-#     'input_vals, expected',
-#     [({'flagBad': 'hot', 'std': 1}, np.ones((10, 5, 5)) * 10),
-#      ({'flagBad': 'dead', 'std': 1}, np.ones((10, 5, 5)) * 10),
-#      ({'flagBad': 'both', 'std': 1}, np.ones((10, 5, 5)) * 10),
-#      ],
-# )
-# def test_bad1_qtbot(input_vals, expected, request, qtbot):
-#     from qtpy import QtWidgets, QtCore, QtTest
-#     _, widget = request.getfixturevalue("prepare_widget_data1")
-#     qtbot.addWidget(widget)
-
-#     def handle_dialog():
-#         # messagebox = QtWidgets.QApplication.activeWindow()
-#         # messagebox = widget.activeWindow()
-#         # or
-#         messagebox = widget.findChild(QtWidgets.QMessageBox)
-#         no_button = messagebox.button(QtWidgets.QMessageBox.No)
-#         qtbot.mouseClick(no_button, QtCore.Qt.LeftButton, delay=1)
-
-#     widget.flagBad = input_vals['flagBad']
-#     widget.std_cutoff.val = input_vals['std']
-
-#     widget.inplace.val, widget.track.val = False, False
-#     widget.updateHistoryFlags()
-
-    # # run correction (What about dialog?)
-    # widget.correctBadPixels()
-    # QtTest.QTest.qWait(500)
-    # QtCore.QTimer.singleShot(100, handle_dialog)
-    # # qtbot.mouseClick(widget.button, QtCore.Qt.LeftButton, delay=1)
-    # QtTest.QTest.qWait(500)
+    widget.correctBadPixels()
+    assert viewer.layers['Bad-pixels'].data.dtype == np.uint8
+    assert viewer.layers['Bad-pixels'].data.shape == expected[0]
+    assert np.allclose(viewer.layers['Bad-pixels'].data, expected[1])
