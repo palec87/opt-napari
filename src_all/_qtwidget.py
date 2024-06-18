@@ -156,6 +156,38 @@ class PreprocessingnWidget(QWidget):
                         'Dark-Bright-corr_' + original_image.name,
                         original_image.contrast_limits)
 
+    def ask_correct_bad_pixels(self, hotPxs, deadPxs):
+        dlg = QMessageBox(self)
+        dlg.setWindowTitle("Bad Pixel correction")
+        dlg.setText("Do you want to correct all those pixels! \n"
+                    "It can take a while. \n"
+                    f"N_hot: {len(hotPxs)} + N_dead: {len(deadPxs)}")
+        dlg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        return dlg.exec_()
+
+    def add_bad_pixels_labels(self, hotPxs, deadPxs):
+        """Adds labels for bad pixels to the viewer.
+
+        This method takes the coordinates of hot pixels and dead pixels and adds
+        labels to the viewer accordingly. The labels are represented by different
+        integer values (1 for hot pixels, 2 for dead pixels).
+
+        Args:
+            hotPxs (list): List of coordinates for hot pixels.
+            deadPxs (list): List of coordinates for dead pixels.
+
+        Returns:
+            None
+        """
+        labels = np.zeros(self.hot_layer_select.value.data.shape,
+                          dtype=np.uint8)
+        if len(hotPxs) > 0:
+            labels[tuple(zip(*hotPxs))] = 1
+        if len(deadPxs) > 0:
+            labels[tuple(zip(*deadPxs))] = 2
+        self.viewer.add_labels(labels,
+                               name='Bad-pixels')
+
     # hot pixels correction (NOT WORKING YET)
     def correctBadPixels(self):
         """Corrects hot pixels in the image.
@@ -177,31 +209,8 @@ class PreprocessingnWidget(QWidget):
                        std_mult=self.std_cutoff.val)
         hotPxs, deadPxs = corr.get_bad_pxs(mode=self.flagBad)
 
-        self.messageBox.setText(f'Number of hot pixels: {len(hotPxs)}')
-        self.messageBox.setText(f'Number of dead pixels: {len(deadPxs)}')
-
-        dlg = QMessageBox(self)
-        dlg.setWindowTitle("Bad Pixel correction")
-        dlg.setText("Do you want to correct all those pixels! \n"
-                    "It can take a while. \n"
-                    f"N_hot: {len(hotPxs)} + N_dead: {len(deadPxs)}")
-        dlg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-        self.button = dlg.exec()
-
-        # yes/no dialog to ask if the user wants to correct the hot pixels
-        if self.button == QMessageBox.No:
-            # display bad pixels
-            data_corr = np.zeros(self.hot_layer_select.value.data.shape,
-                                 dtype=original_image.data.dtype)
-            # hot pixels and dead pixels are displayed as 100
-            for _i, (y, x) in enumerate(hotPxs):
-                data_corr[y, x] = 100
-            for _i, (y, x) in enumerate(deadPxs):
-                data_corr[y, x] = 101
-            self.show_image(data_corr,
-                            'Bad-pixels_' + self.hot_layer_select.value.name,
-                            # self.hot_layer_select.value.contrast_limits,
-                            )
+        if self.ask_correct_bad_pixels(hotPxs, deadPxs) == QMessageBox.No:
+            self.add_bad_pixels_labels(hotPxs, deadPxs)
             return
 
         # Correction is done, TODO: ooptimized for the volumes and threaded

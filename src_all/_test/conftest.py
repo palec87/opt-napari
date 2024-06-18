@@ -105,8 +105,9 @@ def data1():
     img = np.ones((10, 5, 5)) * 10
     dark = np.ones((5, 5)) * 0.1
     bright = np.ones((5, 5)) * 11
-    bad_px = np.ones((5, 5)) * 0.1
-    bad_px[2, 1] = 10
+    bad_px = np.ones((5, 5))
+    bad_px[2, 1] = 100
+    bad_px[1, 2] = 0.1
     return img, dark, bright, bad_px
 
 
@@ -120,35 +121,3 @@ def data2():
     bad_px = np.ones((5, 5)) * 0.1
     bad_px[2, 1] = 10
     return img, dark, bright, bad_px
-
-
-# @pytest.yield_fixture(scope="module")
-# def qtbot_session(qapp, request):
-#     print("  SETUP qtbot")
-#     result = QtBot(qapp)
-#     with capture_exceptions() as exceptions:
-#         yield result
-#     print("  TEARDOWN qtbot")
-
-
-# @pytest.fixture(scope="module")
-# def Viewer(request):
-#     from qtpy import QtWidgets, QtCore, QtTest
-#     print("  SETUP GUI")
-
-#     app, imageViewer = GUI.main_GUI()
-#     qtbotbis = QtBot(app)
-#     QtTest.QTest.qWait(0.5 * 1000)
-
-#     yield app, imageViewer, qtbotbis
-
-#     def handle_dialog():
-#         messagebox = QtWidgets.QApplication.activeWindow()
-#         # or
-#         # messagebox = imageViewer.findChild(QtWidgets.QMessageBox)
-#         yes_button = messagebox.button(QtWidgets.QMessageBox.Yes)
-#         qtbotbis.mouseClick(yes_button, QtCore.Qt.LeftButton, delay=1)
-
-#     QtCore.QTimer.singleShot(100, handle_dialog)
-#     qtbotbis.mouseClick(imageViewer.btn_quit, QtCore.Qt.LeftButton, delay=1)
-#     assert imageViewer.isHidden()
