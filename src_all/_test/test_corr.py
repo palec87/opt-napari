@@ -18,6 +18,10 @@ hot1 = dark1 = bright1 = np.ones((5, 5))
 hot2 = hot1.copy()
 hot2[2, 1] = 10
 
+hot3 = np.ones((5, 5)) * 10
+hot3[1, 2] = 1
+hot3[2, 1] = 30
+
 # define a test image
 img1 = np.ones((5, 5)) * 5
 img2 = img1.copy()
@@ -66,6 +70,55 @@ def test_get_bad_pxs(init_vals, expected):
     else:
         with pytest.raises(ValueError, match='No hot pixel array provided'):
             corr.get_bad_pxs()
+
+
+@pytest.mark.parametrize(
+    'init_vals, mode, expected',
+    [((), 'hot', (None, 7, None, None)),  # no corrections
+     ((), 'dead', (None, 7, None, None)),  # no corrections
+     ((), 'both', (None, 7, None, None)),  # no corrections
+     ((), '', (None, 7, None, None)),  # no corrections
+     ((None, ), 'hot', (None, 7, None, None)),
+     ((None, ), 'dead', (None, 7, None, None)),
+     ((None, ), 'both', (None, 7, None, None)),
+     ((hot1, ), 'hot', ([], [], 7, None, None)),
+     ((hot1, ), 'dead', ([], [], 7, None, None)),
+     ((hot1, ), 'both', ([], [], 7, None, None)),
+     ((hot1, ), '', ([], [], 7, None, None)),
+     ((hot2, 5, ), 'hot', ([], [], 5, None, None)),  # with five the cutoff is 10.17
+     ((hot2, 5, ), 'dead', ([], [], 5, None, None)),  # with five the cutoff is 10.17
+     ((hot2, 5, ), 'both', ([], [], 5, None, None)),  # with five the cutoff is 10.17
+     ((hot2, 5, ), '', ([], [], 5, None, None)),  # with five the cutoff is 10.17
+     ((hot2, 4.85, ), 'hot', ([(2, 1)], [], 4.85, None, None)),
+     ((hot2, 4.85, ), 'dead', ([], [], 4.85, None, None)),
+     ((hot2, 4.85, ), 'both', ([(2, 1)], [], 4.85, None, None)),
+     ((hot2, 4.85, ), '', ([(2, 1)], [], 4.85, None, None)),
+     ((hot3, 4, ), 'hot', ([(2, 1)], [], 4, None, None)),
+     ((hot3, 2, ), 'dead', ([], [(1, 2)], 2, None, None)),
+     ((hot3, 2, ), 'both', ([(2, 1)], [(1, 2)], 2, None, None)),
+     ((hot3, 3, ), 'both', ([(2, 1)], [], 3, None, None)),
+     ((hot3, 4.85, ), '', ([], [], 4.85, None, None)),
+     ],
+)
+def test_get_bad_pxs2(init_vals, mode, expected):
+    corr = Correct(*init_vals)
+    if expected[0] is None:
+        with pytest.raises(ValueError, match='No hot pixel array provided'):
+            corr.get_bad_pxs(mode=mode)
+    elif mode not in ['hot', 'dead', 'both']:
+        with pytest.raises(
+                ValueError,
+                match='Unknown mode option, valid is hot, dead and both.'):
+            corr.get_bad_pxs(mode=mode)
+    elif expected[0] is not None:
+        corr.get_bad_pxs(mode=mode)
+        assert corr.hot_pxs == expected[0]
+        assert corr.dead_pxs == expected[1]
+        assert corr.std_mult == expected[2]
+        assert corr.dark is expected[3]
+        assert corr.bright_corr is expected[4]
+    else:
+        assert 1 == 0
 
 
 @pytest.mark.parametrize(

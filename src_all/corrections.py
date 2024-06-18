@@ -87,6 +87,9 @@ class Correct():
         if self.hot is None:
             raise ValueError('No hot pixel array provided')
 
+        if mode not in ['hot', 'dead', 'both']:
+            raise ValueError('Unknown mode option, valid is hot, dead and both.')
+
         hot_pxs, dead_pxs = [], []
         self.mean = np.mean(self.hot, dtype=np.float64)
         self.std = np.std(self.hot, dtype=np.float64)
@@ -99,7 +102,7 @@ class Correct():
                             )
 
             # if mask did not get any hot pixels, return empty list
-            if np.all(self.maskAbove.mask is False):
+            if np.all(self.maskAbove.mask == False):
                 print('No hot pixels identified')
             else:
                 # iterate over the mask, and append hot pixels to the list
@@ -113,12 +116,14 @@ class Correct():
                             )
 
             # if mask did not get any dead pixels, return empty list
-            if np.all(self.maskBelow.mask is False):
+            if np.all(self.maskBelow.mask == False):
                 print('No dead pixels identified')
             else:
                 # iterate over the mask and append dead pixels to the list
                 for row, col in zip(*np.where(self.maskBelow.mask)):
                     dead_pxs.append((row, col))
+                print(dead_pxs)
+
         self.hot_pxs = hot_pxs
         self.dead_pxs = dead_pxs
         return hot_pxs, dead_pxs
