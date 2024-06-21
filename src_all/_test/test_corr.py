@@ -27,6 +27,18 @@ img1 = np.ones((5, 5)) * 5
 img2 = img1.copy()
 img2[2, 1] = 1
 
+img_bad = np.ones((5, 5)) * 5
+img_bad[2, 1] = 7
+img_bad[1, 2] = 2
+
+img_bad_hot_corr = img_bad.copy()
+img_bad_hot_corr[2, 1] = 5
+
+img_bad_dead_corr = img_bad.copy()
+img_bad_dead_corr[1, 2] = 5
+
+
+
 img3 = np.ones((5, 5)) * 3
 img4 = np.ones((5, 5)) * 4
 
@@ -85,10 +97,13 @@ def test_get_bad_pxs(init_vals, expected):
      ((hot1, ), 'dead', ([], [], 7, None, None)),
      ((hot1, ), 'both', ([], [], 7, None, None)),
      ((hot1, ), '', ([], [], 7, None, None)),
-     ((hot2, 5, ), 'hot', ([], [], 5, None, None)),  # with five the cutoff is 10.17
-     ((hot2, 5, ), 'dead', ([], [], 5, None, None)),  # with five the cutoff is 10.17
-     ((hot2, 5, ), 'both', ([], [], 5, None, None)),  # with five the cutoff is 10.17
-     ((hot2, 5, ), '', ([], [], 5, None, None)),  # with five the cutoff is 10.17
+     # with five the cutoff is 10.17
+     ((hot2, 5, ), 'hot', ([], [], 5, None, None)),
+     # with five the cutoff is 10.17
+     ((hot2, 5, ), 'dead', ([], [], 5, None, None)),
+     # with five the cutoff is 10.17
+     ((hot2, 5, ), 'both', ([], [], 5, None, None)),
+     ((hot2, 5, ), '', ([], [], 5, None, None)),
      ((hot2, 4.85, ), 'hot', ([(2, 1)], [], 4.85, None, None)),
      ((hot2, 4.85, ), 'dead', ([], [], 4.85, None, None)),
      ((hot2, 4.85, ), 'both', ([(2, 1)], [], 4.85, None, None)),
@@ -134,6 +149,89 @@ def test_correct_hot(inits, img, expected):
     corr.get_bad_pxs()
     corrected = corr.correctBadPxs(img)
     assert corrected.all() == expected.all()
+
+
+# testing n4, n8 methods, this data has only 1 hot pixel
+@pytest.mark.parametrize(
+    'inits, mode_corr, neigh, img, expected',
+    [
+     ((hot1, ), 'hot', 'n4', img1, (img1, [], [])),
+     ((hot2, 5, ), 'hot', 'n4', img1, (img1, [], [])),
+     ((hot2, 4, ), 'hot', 'n4', img1, (img1, [(2, 1)], [])),  # no action, because img is flat
+     ((hot2, 4, ), 'hot', 'n4', img2, (img1, [(2, 1)], [])),  # this is correctimg stuff
+
+     ((hot1, ), 'dead', 'n4', img1, (img1, [], [])),
+     ((hot2, 5, ), 'dead', 'n4', img1, (img1, [], [])),
+     ((hot2, 4, ), 'dead', 'n4', img1, (img1, [], [])),  # no action, because img is flat
+     ((hot2, 4, ), 'dead', 'n4', img2, (img2, [], [])),  # this is correctimg stuff
+
+     ((hot1, ), 'both', 'n4', img1, (img1, [], [])),
+     ((hot2, 5, ), 'both', 'n4', img1, (img1, [], [])),
+     ((hot2, 4, ), 'both', 'n4', img1, (img1, [(2, 1)], [])),  # no action, because img is flat
+     ((hot2, 4, ), 'both', 'n4', img2, (img1, [(2, 1)], [])),  # this is correctimg stuff
+
+     ((hot1, ), 'hot', 'n8', img1, (img1, [], [])),
+     ((hot2, 5, ), 'hot', 'n8', img1, (img1, [], [])),
+     ((hot2, 4, ), 'hot', 'n8', img1, (img1, [(2, 1)], [])),  # no action, because img is flat
+     ((hot2, 4, ), 'hot', 'n8', img2, (img1, [(2, 1)], [])),  # this is correctimg stuff
+
+     ((hot1, ), 'dead', 'n8', img1, (img1, [], [])),
+     ((hot2, 5, ), 'dead', 'n8', img1, (img1, [], [])),
+     ((hot2, 4, ), 'dead', 'n8', img1, (img1, [], [])),  # no action, because img is flat
+     ((hot2, 4, ), 'dead', 'n8', img2, (img2, [], [])),
+
+     ((hot1, ), 'both', 'n8', img1, (img1, [], [])),
+     ((hot2, 5, ), 'both', 'n8', img1, (img1, [], [])),
+     ((hot2, 4, ), 'both', 'n8', img1, (img1, [(2, 1)], [])),  # no action, because img is flat
+     ((hot2, 4, ), 'both', 'n8', img2, (img1, [(2, 1)], [])),
+     ],
+)
+def test_correct_hot2(inits, mode_corr, neigh, img, expected):
+    corr = Correct(*inits)
+    corr.get_bad_pxs(mode=mode_corr)
+    assert corr.hot_pxs == expected[1]
+    assert corr.dead_pxs == expected[2]
+    corrected = corr.correctBadPxs(img, mode=neigh)
+    assert corrected.all() == expected[0].all()
+
+
+# testing n4, n8 methods, this data has only 1 hot pixel
+# for hot3, cutoff for hot is 4, for dead is 2
+@pytest.mark.parametrize(
+    'inits, mode_corr, neigh, img, expected',
+    [
+     ((hot3, ), 'hot', 'n4', img1, (img1, [], [])),
+     ((hot3, 5, ), 'hot', 'n4', img_bad, (img_bad, [], [])), # no action
+     ((hot3, 4, ), 'hot', 'n4', img_bad, (img_bad_hot_corr, [(2, 1)], [])),  # corr
+
+     ((hot3, ), 'dead', 'n4', img1, (img1, [], [])),
+     ((hot3, 3, ), 'dead', 'n4', img_bad, (img_bad, [], [])),
+     ((hot3, 2, ), 'dead', 'n4', img_bad, (img_bad_dead_corr, [], [(1, 2)])),  # no action, because img is flat
+
+     ((hot3, ), 'both', 'n4', img1, (img1, [], [])),
+     ((hot3, 4, ), 'both', 'n4', img_bad, (img_bad_hot_corr, [(2, 1)], [])),
+     ((hot3, 2, ), 'both', 'n4', img_bad, (img1, [(2, 1)], [(1, 2)])),  # no action, because img is flat
+    # TODO: this must be wrong
+     ((hot3, ), 'hot', 'n8', img1, (img1, [], [])),
+     ((hot3, 5, ), 'hot', 'n8', img_bad, (img_bad, [], [])), # no action
+     ((hot3, 4, ), 'hot', 'n8', img_bad, (img_bad_hot_corr, [(2, 1)], [])),  # corr
+
+     ((hot3, ), 'dead', 'n8', img1, (img1, [], [])),
+     ((hot3, 3, ), 'dead', 'n8', img_bad, (img_bad, [], [])),
+     ((hot3, 2, ), 'dead', 'n8', img_bad, (img_bad_dead_corr, [], [(1, 2)])),  # no action, because img is flat
+
+     ((hot3, ), 'both', 'n8', img1, (img1, [], [])),
+     ((hot3, 4, ), 'both', 'n8', img_bad, (img_bad_hot_corr, [(2, 1)], [])),
+     ((hot3, 2, ), 'both', 'n8', img_bad, (img1, [(2, 1)], [(1, 2)])),  # no action, because img is flat
+     ],
+)
+def test_correct_hot3(inits, mode_corr, neigh, img, expected):
+    corr = Correct(*inits)
+    corr.get_bad_pxs(mode=mode_corr)
+    assert corr.hot_pxs == expected[1]
+    assert corr.dead_pxs == expected[2]
+    corrected = corr.correctBadPxs(img, mode=neigh)
+    assert corrected.all() == expected[0].all()
 
 
 @pytest.mark.parametrize(
@@ -185,6 +283,7 @@ def test_correct_int(inits, corr_int_inputs, expected):
     assert corrected.all() == expected[0].all()
     assert report['mode'] == expected[1]['mode']
 
+
 # test clip_and_convert_data method
 @pytest.mark.parametrize(
     'input_vals, expected',
@@ -200,4 +299,3 @@ def test_clip_and_convert(input_vals, expected, request):
     corr = Correct()
     ans = corr.clip_and_convert_data(input_vals['data'])
     assert np.allclose(ans, expected)
-
