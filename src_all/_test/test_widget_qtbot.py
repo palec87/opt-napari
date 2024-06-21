@@ -42,3 +42,8 @@ def test_bad_pixels1_no_corr(init_vals, expected, request, monkeypatch):
     assert viewer.layers['Bad-pixels'].data.dtype == np.uint8
     assert viewer.layers['Bad-pixels'].data.shape == expected[0]
     assert np.allclose(viewer.layers['Bad-pixels'].data, expected[1])
+
+    handlers = widget.log.handlers[:]
+    for hndlr in handlers:
+        widget.log.removeHandler(hndlr)
+        hndlr.close()

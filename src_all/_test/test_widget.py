@@ -50,6 +50,11 @@ def test_corrDB1(input_vals, expected, request):
     assert viewer.layers['Dark-Bright-corr_img'].data.dtype == expected.dtype
     # assert data
     assert np.allclose(viewer.layers['Dark-Bright-corr_img'].data, expected)
+    
+    handlers = widget.log.handlers[:]
+    for hndlr in handlers:
+        widget.log.removeHandler(hndlr)
+        hndlr.close()
 
 
 @pytest.mark.parametrize(
@@ -90,6 +95,11 @@ def test_corrDB2(input_vals, expected, request):
     assert viewer.layers['Dark-Bright-corr_img'].data.dtype == expected.dtype
     # assert data
     assert np.allclose(viewer.layers['Dark-Bright-corr_img'].data, expected)
+    
+    handlers = widget.log.handlers[:]
+    for hndlr in handlers:
+        widget.log.removeHandler(hndlr)
+        hndlr.close()
 
 
 def test_show_image(request):
@@ -104,19 +114,7 @@ def test_show_image(request):
     assert np.array_equal(widget.viewer.layers['new_image'].data,
                           np.ones((5, 5, 5)))
 
-
-# test clip_and_convert_data method
-@pytest.mark.parametrize(
-    'input_vals, expected',
-    [({'data': np.ones((10, 5, 5)) * 10},
-      (np.ones((10, 5, 5)) * 65535).astype(np.uint16),),
-     ({'data': np.ones((10, 5, 5)) * -1},
-      np.zeros((10, 5, 5)),),
-     ({'data': np.array(([[0.1, 5], [0.1, -1]]))},
-      (np.array([[0.1, 1], [0.1, 0]]) * 65535).astype(np.uint16),),
-     ],
-)
-def test_clip_and_convert(input_vals, expected, request):
-    _, widget = request.getfixturevalue("prepare_widget_data1")
-    ans = widget.clip_and_convert_data(input_vals['data'])
-    assert np.allclose(ans, expected)
+    handlers = widget.log.handlers[:]
+    for hndlr in handlers:
+        widget.log.removeHandler(hndlr)
+        hndlr.close()

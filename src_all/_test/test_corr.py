@@ -68,7 +68,7 @@ def test_get_bad_pxs(init_vals, expected):
         assert corr.dark is expected[2]
         assert corr.bright_corr is expected[3]
     else:
-        with pytest.raises(ValueError, match='No hot pixel array provided'):
+        with pytest.raises(ValueError, match='No bad pixel array provided'):
             corr.get_bad_pxs()
 
 
@@ -103,7 +103,7 @@ def test_get_bad_pxs(init_vals, expected):
 def test_get_bad_pxs2(init_vals, mode, expected):
     corr = Correct(*init_vals)
     if expected[0] is None:
-        with pytest.raises(ValueError, match='No hot pixel array provided'):
+        with pytest.raises(ValueError, match='No bad pixel array provided'):
             corr.get_bad_pxs(mode=mode)
     elif mode not in ['hot', 'dead', 'both']:
         with pytest.raises(
@@ -184,3 +184,20 @@ def test_correct_int(inits, corr_int_inputs, expected):
     corrected, report = corr.correct_int(*corr_int_inputs)
     assert corrected.all() == expected[0].all()
     assert report['mode'] == expected[1]['mode']
+
+# test clip_and_convert_data method
+@pytest.mark.parametrize(
+    'input_vals, expected',
+    [({'data': np.ones((10, 5, 5)) * 10},
+      (np.ones((10, 5, 5)) * 65535).astype(np.uint16),),
+     ({'data': np.ones((10, 5, 5)) * -1},
+      np.zeros((10, 5, 5)),),
+     ({'data': np.array(([[0.1, 5], [0.1, -1]]))},
+      (np.array([[0.1, 1], [0.1, 0]]) * 65535).astype(np.uint16),),
+     ],
+)
+def test_clip_and_convert(input_vals, expected, request):
+    corr = Correct()
+    ans = corr.clip_and_convert_data(input_vals['data'])
+    assert np.allclose(ans, expected)
+
