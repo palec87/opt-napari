@@ -7,6 +7,7 @@ Tests for backtrack class
 import pytest
 from napari import Viewer
 import numpy as np
+from _qtwidget import PreprocessingnWidget as pw
 
 
 __author__ = 'David Palecek'
@@ -177,8 +178,6 @@ def test_update_history_corrInt(make_napari_viewer, backtrack_init,
 )
 def test_undo_bin(make_napari_viewer, backtrack_init, input_vals,
                   expected, request):
-    from _qtwidget import PreprocessingnWidget as pw
-
     viewer: Viewer = make_napari_viewer()
 
     _widget = pw(viewer)
@@ -200,7 +199,7 @@ def test_undo_bin(make_napari_viewer, backtrack_init, input_vals,
     viewer.add_image(bright, name='bright')
     _widget.bright_layer_select.value = viewer.layers['bright']
     viewer.add_image(bad, name='bad')
-    _widget.hot_layer_select.value = viewer.layers['bad']
+    _widget.bad_layer_select.value = viewer.layers['bad']
 
     _widget.bin_stack()
     np.testing.assert_equal(_widget.history.history_item, expected[1])
@@ -209,6 +208,10 @@ def test_undo_bin(make_napari_viewer, backtrack_init, input_vals,
     _widget.undoHistory()
     assert np.array_equal(viewer.layers['img'].data, expected[1]['data'])
     assert _widget.history.history_item == {}
+    handlers = _widget.log.handlers[:]
+    for hndlr in handlers:
+        _widget.log.removeHandler(hndlr)
+        hndlr.close()
 
 
 @pytest.mark.parametrize(
@@ -242,7 +245,7 @@ def test_undo_bin_exception1(make_napari_viewer, backtrack_init,
     viewer.add_image(bright, name='bright')
     _widget.bright_layer_select.value = viewer.layers['bright']
     viewer.add_image(bad, name='bad')
-    _widget.hot_layer_select.value = viewer.layers['bad']
+    _widget.bad_layer_select.value = viewer.layers['bad']
 
     _widget.bin_stack()
     np.testing.assert_equal(_widget.history.history_item, expected[1])
@@ -250,6 +253,11 @@ def test_undo_bin_exception1(make_napari_viewer, backtrack_init,
     with pytest.raises(ValueError) as info:
         _widget.undoHistory()
     assert str(info.value) == 'No State to revert to.'
+
+    handlers = _widget.log.handlers[:]
+    for hndlr in handlers:
+        _widget.log.removeHandler(hndlr)
+        hndlr.close()
 
 
 @pytest.mark.parametrize(
@@ -282,7 +290,7 @@ def test_undo_bin_exception2(make_napari_viewer, backtrack_init,
     viewer.add_image(bright, name='bright')
     _widget.bright_layer_select.value = viewer.layers['bright']
     viewer.add_image(bad, name='bad')
-    _widget.hot_layer_select.value = viewer.layers['bad']
+    _widget.bad_layer_select.value = viewer.layers['bad']
 
     with pytest.raises(ValueError) as info:
         _widget.bin_stack()
@@ -292,6 +300,11 @@ def test_undo_bin_exception2(make_napari_viewer, backtrack_init,
     with pytest.raises(ValueError) as info:
         _widget.undoHistory()
     assert str(info.value) == 'No State to revert to.'
+
+    handlers = _widget.log.handlers[:]
+    for hndlr in handlers:
+        _widget.log.removeHandler(hndlr)
+        hndlr.close()
 
 
 ######################
@@ -333,7 +346,7 @@ def test_undo_roi(make_napari_viewer, backtrack_init, input_vals,
     viewer.add_image(bright, name='bright')
     _widget.bright_layer_select.value = viewer.layers['bright']
     viewer.add_image(bad, name='bad')
-    _widget.hot_layer_select.value = viewer.layers['bad']
+    _widget.bad_layer_select.value = viewer.layers['bad']
 
     # add points layer
     viewer.add_points(input_vals, name='points')
@@ -353,3 +366,8 @@ def test_undo_roi(make_napari_viewer, backtrack_init, input_vals,
     _widget.bin_factor.val = 2
     _widget.bin_stack()
     assert np.array_equal(viewer.layers['img'].data, np.ones((10, 2, 2)) * 10)
+
+    handlers = _widget.log.handlers[:]
+    for hndlr in handlers:
+        _widget.log.removeHandler(hndlr)
+        hndlr.close()

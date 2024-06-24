@@ -11,7 +11,10 @@ import pytest
 import numpy as np
 from ..utils import (
     select_roi, bin_3d, norm_img,
-    img_to_int_type, is_positive)
+    img_to_int_type, is_positive,
+    rescale_img)
+
+from plotting import PlotDialog
 
 
 __author__ = 'David Palecek'
@@ -193,3 +196,84 @@ def testIsPositive(inputs, expected):
     """
     out = is_positive(*inputs)
     assert out == expected
+
+
+arr1 = np.ones((4, 4)) * 127
+arr1[1, 1] = - 128
+arr1 = arr1.astype(np.int8)
+
+res1 = np.ones((4, 4)) * 255
+res1[1, 1] = 0
+res1 = res1.astype(np.uint8)
+
+arr2 = np.ones((4, 4)) * 32767
+arr2[1, 1] = - -32768
+arr2 = arr2.astype(np.int16)
+
+res2 = np.ones((4, 4)) * 2**16 - 1
+res2[1, 1] = 0
+res2 = res2.astype(np.uint16)
+
+
+# test for rescale_img
+@pytest.mark.parametrize(
+    'img, dtype, expected',
+    [(np.ones((4, 4)), np.uint8, (np.ones((4, 4)) * 255).astype(np.uint8)),
+     (np.ones((4, 4)) * 255, np.uint8,
+      (np.ones((4, 4)) * 255).astype(np.uint8)),
+     (np.ones((4, 4)) * 256, np.uint8,
+      (np.ones((4, 4)) * 255).astype(np.uint8)),
+     (np.ones((4, 4)) * 65535, np.uint16, np.ones((4, 4)) * 65535),
+     (np.ones((4, 4)) * 65536, np.uint16, np.ones((4, 4)) * 65535),
+     (arr1, np.uint8, res1),
+     (arr2, np.uint16, res2),
+     ],
+    )
+def test_rescale_img(img, dtype, expected):
+    """
+    Test the rescale_img function.
+
+    Args:
+        img: Input array to be rescaled.
+        dtype: Desired data type of the output array.
+        expected: Expected output array after rescaling.
+
+    Returns:
+        None
+
+    Raises:
+        AssertionError: If the output array dtype or values do not match the
+            expected values.
+    """
+    out = rescale_img(img, dtype)
+    np.testing.assert_array_equal(out, expected)
+
+
+# test plotting module
+def test_PlotDialog(request):
+    """
+    Test the PlotDialog class.
+
+    Parameters:
+    - None
+
+    Returns:
+    - None
+
+    Raises:
+    - AssertionError: If the plot dialog is not created.
+    """
+    _, widget = request.getfixturevalue("prepare_widget_data1")
+    report = {'stack_orig_int': [1, 2, 3, 4, 5],
+              'stack_corr_int': [2, 2, 2, 2, 2],
+              }
+    plot = PlotDialog(widget, report)
+    assert plot is not None
+    assert plot.canvas.ax1 is not None
+    assert plot.canvas.ax1.get_xlabel() == 'OPT step number'
+    assert plot.canvas.ax1.get_ylabel() == 'Intensity'
+
+    handlers = widget.log.handlers[:]
+    for hndlr in handlers:
+        widget.log.removeHandler(hndlr)
+        hndlr.close()

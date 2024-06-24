@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Corrections module for the microscopy acquisition
+Corrections Class for the microscopy acquisition
 
 corrections available:
 #. Dark-field correction
@@ -12,13 +12,10 @@ corrections available:
     * Harder to do for the Fluorescence, because of the excitation scatter
         leaking through filters.
     * Flat field can be used to identify dead pixels too
-#. Hot pixel correction
-    * Hot pixels obtained from long exposure on the blocked camera
+#. bad pixel correction
+    * bad pixels obtained from long exposure on the blocked camera
     * Dead pixels form flat field acquisition.
-    * TODO Notimplemented: Alternative you can use it for dead pixel
-        identification (rename to BadPixel correction)
-    * Possible to correct as mean of 4 or 8 neighbours
-TODO: Intensity correction
+    * Possible to correct as mean of 4 or 8 neighbors
 More crucial for the shorter exposure times (less averaging of the source
 intensity variations), which depends on which time-scale the light-source
 drifts.
@@ -26,12 +23,11 @@ drifts.
 Notes:
 * Exposure on the dark and bright field corrections must be
 the same as the experimental exposure.
-* TODO: Need to ensure correct logic of the correction and their redefinition.
-    Is the logic supposed to be taken care of on this class level?
 """
 
 import numpy as np
-from utils import norm_img, img_to_int_type, is_positive
+from utils import img_to_int_type, is_positive, rescale_img
+import logging
 
 
 class Correct():
@@ -40,26 +36,32 @@ class Correct():
 
     #. Dark-field
     #. Bright-field
-    #. Hot-pixel correction
+    #. bad-pixel correction
     #. Intensity correction.
     """
-    def __init__(self, hot: np.array = None, std_mult: float = 7.,
-                 dark: np.array = None, bright: np.array = None,
+    def __init__(self, bad: np.ndarray = None, std_mult: float = None,
+                 dark: np.ndarray = None, bright: np.ndarray = None,
                  ) -> None:
         """ Initialize the correction class with the correction arrays.
 
         Args:
-            hot (np.array, optional): Hot pixel acquisiion. Defaults to None.
-            std_mult (float, optional): STD cutoff for outliers (hot pixels).
-                Defaults to 7..
+            bad (np.array, optional): Bad pixel acquisition. Defaults to None.
+            std_mult (float, optional): STD cutoff for outliers (bad pixels).
+                Defaults to 7.0 via self.set_std_mult().
             dark (np.array, optional): Dark counts camera acquisition.
                 Defaults to None.
-            bright (np.array, optional): Bright field correction acquisiiont.
+            bright (np.array, optional): Bright field correction acquisition.
                 Defaults to None.
         """
-        self.hot = hot
+        self.logger = logging.getLogger(__name__)
+        self.bad = bad
         self.hot_pxs = None
-        self.std_mult = std_mult
+        self.dead_pxs = None
+        try:
+            self.set_std_mult(std_mult)
+        except ValueError as e:
+            self.logger.warning(e)
+            self.std_mult = 7.0
 
         self.dark = dark
         self.dark_corr = None
@@ -67,71 +69,15 @@ class Correct():
         self.bright = bright
         self.bright_corr = None
 
-        if hot is not None:
-            print('Change, get_bad_pixels is a new name',
-                  'needs to be called but allows to identify.',
-                  'dead pixels for FL hot pixels for TR')
-
-            # self.hot_pxs = self.get_hot_pxs()
-
-    def get_bad_pxs(self, mode: str = 'hot') -> list[tuple[int, int]]:
-        """
-        Identify hot pixels from the hot array based on the hot
-        std_mutl facter threshold. Hot pixel has intensity greater than
-
-        mean(img) + std_mult * std(img)
-        Args:
-            mode (str, optional): Mode of the hot pixel identification.
-                Defaults to 'hot'. Options are 'hot', 'dead' and 'both'.
-        """
-        if self.hot is None:
-            raise ValueError('No hot pixel array provided')
-
-        hot_pxs, dead_pxs = [], []
-        self.mean = np.mean(self.hot, dtype=np.float64)
-        self.std = np.std(self.hot, dtype=np.float64)
-        print('Hot image stats', mode, self.mean, self.std)
-
-        if mode == 'hot' or mode == 'both':
-            self.maskAbove = np.ma.masked_greater(
-                            self.hot,
-                            self.mean + self.std_mult * self.std,
-                            )
-
-            # if mask did not get any hot pixels, return empty list
-            if np.all(self.maskAbove.mask is False):
-                print('No hot pixels identified')
-            else:
-                # iterate over the mask, and append hot pixels to the list
-                for row, col in zip(*np.where(self.maskAbove.mask)):
-                    hot_pxs.append((row, col))
-
-        if mode == 'dead' or mode == 'both':
-            self.maskBelow = np.ma.masked_less(
-                            self.hot,
-                            self.mean - self.std_mult * self.std,
-                            )
-
-            # if mask did not get any dead pixels, return empty list
-            if np.all(self.maskBelow.mask is False):
-                print('No dead pixels identified')
-            else:
-                # iterate over the mask and append dead pixels to the list
-                for row, col in zip(*np.where(self.maskBelow.mask)):
-                    dead_pxs.append((row, col))
-        self.hot_pxs = hot_pxs
-        self.dead_pxs = dead_pxs
-        return hot_pxs, dead_pxs
-
     def correctBadPxs(self, img: np.array, mode: str = 'n4') -> np.array:
-        """Correct hot pixels from its neighbour pixel values. It ignores the
-        neighbour pixel if it was identified as hot pixel itself.
+        """Correct hot pixels from its neighbor pixel values. It ignores the
+        neighbor pixel if it was identified as hot pixel itself.
 
         Args:
             img (np.array): image to be corrected.
-            mode (str, optional): How to pick neighbours. Defaults to 'n4',
+            mode (str, optional): How to pick neighbors. Defaults to 'n4',
                 up, bottom left, right. Other option is n8, which takes the
-                diagonal neighbours too.
+                diagonal neighbors too.
 
         Raises:
             IndexError: Raised if the hot_corr array does not match the shape
@@ -144,15 +90,15 @@ class Correct():
         self.badPxs = set(self.hot_pxs + self.dead_pxs)
 
         if self.badPxs == []:
-            print('No hot pixels identified, nothing to correct')
+            self.logger.info('No hot pixels identified, nothing to correct')
             return img
 
         # check if the shapes of the correction and image match
-        if self.hot.shape != img.shape:
-            print(self.hot.shape, img.shape)
+        if self.bad.shape != img.shape:
+            print(self.bad.shape, img.shape)
             raise IndexError('images do not have the same shape')
 
-        # define neighbours
+        # define neighbors
         if mode == 'n4':
             neighs = [(-1, 0), (0, -1), (0, 1), (1, 0)]  # U, L, R, D
         elif mode == 'n8':
@@ -165,23 +111,25 @@ class Correct():
 
         ans = img.copy()
 
-        # loop over identified hot pixels and correct
+        # loop over identified bad pixels and correct
         for badPx in self.badPxs:
             neigh_vals = []
             for neigh in neighs:
                 px = np.add(np.array(badPx), np.array(neigh))
                 # I can do this because I checked shapes above
-                # check if neighbour is out of the image ranges.
-                if 0 > px[0] or px[0] >= img.shape[0] or 0 > px[1] or px[1] >= img.shape[1]:
+                # check if neighbor is out of the image ranges.
+                if (0 > px[0] or px[0] >= img.shape[0] or
+                        0 > px[1] or px[1] >= img.shape[1]):
                     continue
 
-                # ignore if neighbour is hot pixel
-                if tuple(px) in self.hot_pxs:
+                # ignore if neighbor is bad pixel
+                if tuple(px) in self.badPxs:
                     continue
 
                 neigh_vals.append(img[px[0], px[1]])
 
-            # replace hot pixel with the mean of the neighbours
+            # replace hot pixel with the mean of the neighbors
+            self.logger.debug(neigh_vals, neighs, badPx)
             ans[badPx] = int(np.mean(neigh_vals))
 
         # test for negative values
@@ -191,80 +139,82 @@ class Correct():
         ans = img_to_int_type(ans, dtype=ans.dtype)
         return ans
 
-    def correct_dark(self, img: np.array) -> np.array:
-        """Subtract dark image from the img.
-        TODO: treating if dark correction goes negative?? Ask if to continue?
+    def correct_dark_bright(self, stack: np.ndarray,
+                            useDark: bool = True,
+                            useBright: bool = False,
+                            modality: str = 'Transmission') -> np.ndarray:
+        """
+        Correct stack of images with dark and bright field images
 
         Args:
-            img (np.array): Img to be corrected
-
-        Raises:
-            IndexError: If the shapes do not match
-
-        Returns:
-            np.array: corrected image
-        """
-        if self.dark.shape != img.shape:
-            raise IndexError('images do not have the same shape')
-
-        # correction
-        ans = img - self.dark
-        # test for negative values
-        is_positive(ans, 'Dark-field')
-
-        # cast it on correct dtype
-        ans = img_to_int_type(ans,  dtype=img.dtype)
-        return ans
-
-    def correct_bright(self, img: np.array) -> np.array:
-        """Correct image using a bright-field correction image
-
-        Args:
-            img (np.arrays): Img to correct
-
-        Raises:
-            IndexError: If the shapes do not match
+            stack (np.array): Stack of images to be corrected
+            useDark (bool, optional): Use dark field correction.
+                Defaults to True.
+            useBright (bool, optional): Use bright field correction.
+                Defaults to False.
+            modality (str, optional): Modality of the images.
+                Defaults to Transmission.
 
         Returns:
-            np.array: Corrected image
+            np.array: Corrected stack of images
         """
-        if self.bright.shape != img.shape:
-            raise IndexError('images do not have the same shape')
+        if modality not in ['Transmission', 'Emission']:
+            raise ValueError(
+                'Unknown modality option, valid is Transmission and Emission.',
+                )
 
-        # bright-field needs to be first corrected with
-        # dark and hot pixels if possible
-        try:
-            self.bright_corr = norm_img(self.bright_corr)
-        except:
-            print('Probably bright is not yet dark/hot corrected, trying that')
-            # TODO: ensure this is done only once. Should offer redoing it
-            # from the raw image, if user tries to run this second time.
-            self.bright_corr = self.correct_dark(self.bright)      
-            if self.hot is None:
-                pass
+        if useDark is False and useBright is False:
+            self.logger.warning('No correction selected.')
+            return stack.astype(np.uint16)
+
+        # I do not like not keeping the dtype the same, but float
+        # operations do not work otherwise
+        data_corr = np.empty(stack.shape,
+                             #  dtype=stack.dtype
+                             )
+        if modality == 'Transmission':
+            if useBright and useDark:
+                data_corr = ((stack - self.dark) /
+                             (self.bright - self.dark))
+                # because it is float between 0-1, needs to be rescaled
+                # and casted to uint16 check if the image has element
+                # greater than 1 or less than 0
+                data_corr = self.clip_and_convert_data(data_corr)
+
+            elif useBright and not useDark:
+                data_corr = stack / self.bright
+                # this is float between 0-1, rescaled and cast to uint16
+                # make sure that the image is between 0-1 first
+                data_corr = self.clip_and_convert_data(data_corr)
+
+            elif useDark and not useBright:
+                data_corr = self.subtract_images(stack, self.dark)
             else:
-                try:
-                    # the same as above, run only once.
-                    self.bright_corr = self.correctBadPxs(self.bright_corr)
-                except TypeError:
-                    pass
+                raise ValueError('Unknown combination of corrections')
 
-            # normalize to one (return floats)
-            self.bright_corr = norm_img(self.bright_corr)
-        # not overflow, because a float
-        ans = img / self.bright_corr
+        elif modality == 'Emission':
+            # this assumes that dark is contained in the bright
+            # because here I am subtracting
+            # (stack - dark) - (bright - dark) = stack - bright
+            if useBright:
+                # make sure accidental floats are handled
+                data_corr = self.subtract_images(stack, self.bright)
 
-        # test for negative values
-        is_positive(ans, 'Bright-field')
+            elif not useBright:
+                data_corr = self.subtract_images(stack, self.dark)
+            else:
+                raise ValueError('Unknown combination of corrections')
 
-        # cast it on correct dtype, and clips negative values!!
-        ans = img_to_int_type(ans, dtype=img.dtype)
-        return ans
+            # get rid of potential negative values
+            data_corr = np.clip(data_corr, 0, None).astype(np.uint16)
+
+        return data_corr
 
     def correct_int(self, img_stack: np.ndarray, mode: str = 'integral',
                     use_bright: bool = True, rect_dim: int = 50,
                     cast_to_int: bool = True) -> np.ndarray:
-        """Intensity correction over the stack of images which are expected
+        """
+        Intensity correction over the stack of images which are expected
         to have the same background intensity. It is preferable to
         corrected for dark, bright, and bad pixels first
 
@@ -275,7 +225,7 @@ class Correct():
                 and integral_bottom. Defaults to 'integral'.
             use_bright (bool, optional): if bright field acquisition is a ref
                 to scale images. Defaults to True.
-            rect_dim (int, optional): size of rectabgles in the corners in
+            rect_dim (int, optional): size of rectangles in the corners in
                 pixels. Defaults to 50.
 
         Raises:
@@ -302,7 +252,7 @@ class Correct():
         else:
             print('Using avg of the corners in the img stack as ref')
             # assuming the stacks 3rd dimension is the right one.
-            # mean over steps in the aquisition
+            # mean over steps in the acquisition
             ref = ((np.mean(img_stack[:, :rect_dim, :rect_dim], axis=0)),
                    (np.mean(img_stack[:, :rect_dim, -rect_dim:], axis=0)),
                    (np.mean(img_stack[:, -rect_dim:, :rect_dim], axis=0)),
@@ -332,10 +282,10 @@ class Correct():
             # as long as the rectangles ar the same, it is equivalent
             if mode == 'integral':
                 img_int = np.mean((np.mean(img[:rect_dim, :rect_dim]),
-                                np.mean(img[:rect_dim, -rect_dim:]),
-                                np.mean(img[-rect_dim:, :rect_dim]),
-                                np.mean(img[-rect_dim:, -rect_dim:]),
-                                ))
+                                   np.mean(img[:rect_dim, -rect_dim:]),
+                                   np.mean(img[-rect_dim:, :rect_dim]),
+                                   np.mean(img[-rect_dim:, -rect_dim:]),
+                                   ))
             elif mode == 'integral_bottom':
                 img_int = np.mean((
                                 np.mean(img[-rect_dim:, :rect_dim]),
@@ -345,12 +295,13 @@ class Correct():
             corr_stack[i] = (img / img_int) * self.ref
 
             # intensity after correction
-            intCorr.append(np.mean((np.mean(corr_stack[i][:rect_dim, :rect_dim]),
-                                    np.mean(corr_stack[i][:rect_dim, -rect_dim:]),
-                                    np.mean(corr_stack[i][-rect_dim:, :rect_dim]),
-                                    np.mean(corr_stack[i][-rect_dim:, -rect_dim:]),
-                                    ))
-                           )
+            intCorr.append(
+                np.mean((np.mean(corr_stack[i][:rect_dim, :rect_dim]),
+                         np.mean(corr_stack[i][:rect_dim, -rect_dim:]),
+                         np.mean(corr_stack[i][-rect_dim:, :rect_dim]),
+                         np.mean(corr_stack[i][-rect_dim:, -rect_dim:]),
+                         ))
+            )
             print(i, end='\r')
 
         # stored in order to tract the stability fluctuations.
@@ -364,7 +315,7 @@ class Correct():
         if cast_to_int:
             corr_stack = img_to_int_type(corr_stack, dtype=corr_stack.dtype)
 
-        # int correction dictioanary report
+        # int correction dictionary report
         intCorrReport = {'mode': mode,
                          'use_bright': use_bright,
                          'rect_dim': rect_dim,
@@ -375,42 +326,151 @@ class Correct():
 
         return corr_stack, intCorrReport
 
-    # This method not used in the napari plugin
-    def correct_all(self, img: np.array, mode_hot='n4') -> np.array:
+    def get_bad_pxs(self, mode: str = 'hot') -> list[tuple[int, int]]:
         """
-        Perform all available corrections for single np.array image.
+        Identify bad pixels from the bad array based on the bad
+        std_mult factor threshold. Hot pixel has intensity greater than
 
-        1. subtract dark from img and white
-        2. remove hot pixels from white
-        3. correct white in the img
-        4. remove hot pixels from img
+        mean(img) + std_mult * std(img). Dead pixel has intensity less than
+        mean(img) - std_mult * std(img).
+
+        TODO: This method should also also have and option for median method
+        Args:
+            mode (str, optional): Mode of the bad pixel identification.
+                Defaults to 'hot'. Options are 'hot', 'dead' and 'both'.
+        """
+        if self.bad is None:
+            raise ValueError('No bad pixel array provided')
+
+        if mode not in ['hot', 'dead', 'both']:
+            raise ValueError(
+                'Unknown mode option, valid is hot, dead and both.')
+
+        self.hot_pxs, self.dead_pxs = [], []
+        self.mean = np.mean(self.bad, dtype=np.float64)
+        self.std = np.std(self.bad, dtype=np.float64)
+
+        if mode == 'hot' or mode == 'both':
+            self.maskAbove = np.ma.masked_greater(
+                            self.bad,
+                            self.mean + self.std_mult * self.std,
+                            )
+
+            # if mask did not get any bad pixels, return empty list
+            if np.all(self.maskAbove.mask is False):
+                self.logger.info('No hot pixels identified')
+                self.logger.info(f'{self.mean} + {self.std_mult} * {self.std}')
+                self.logger.info(f'{self.bad.max()}, {self.bad.min()}')
+            else:
+                # iterate over the mask, and append hot pixels to the list
+                for row, col in zip(*np.where(self.maskAbove.mask)):
+                    self.hot_pxs.append((row, col))
+
+        if mode == 'dead' or mode == 'both':
+            self.maskBelow = np.ma.masked_less(
+                            self.bad,
+                            self.mean - self.std_mult * self.std,
+                            )
+
+            # if mask did not get any dead pixels, return empty list
+            if np.all(self.maskBelow.mask is False):
+                self.logger.info('No dead pixels identified')
+            else:
+                # iterate over the mask and append dead pixels to the list
+                for row, col in zip(*np.where(self.maskBelow.mask)):
+                    self.dead_pxs.append((row, col))
+
+    def clip_and_convert_data(self, data_corr: np.ndarray) -> np.ndarray:
+        """Clip the data to 0-1 and convert it to uint16
 
         Args:
-            img (np.array): img to correct
-            mode_hot (str, optional): mode of selecting hot pixel neighbours.
-                Defaults to 'n4'.
+            data_corr (np.ndarray): Data to be clipped and converted
 
         Returns:
-            np.array: Fully corrected image, also casted to the original dtype
+            np.ndarray: Clipped and converted data
         """
-        # TODO: this leads to repetition of steps I think
-        img_format = img.dtype
+        if np.amax(data_corr) > 1 or np.amin(data_corr) < 0:
+            self.logger.warning('Overflows %.2f, %.2f, clipping to 0-1.',
+                                data_corr.min(), data_corr.max(),
+                                )
+            data_corr = np.clip(data_corr, 0, 1)
 
-        # step 1
-        self.img_corr = self.correct_dark(img)
-        self.bright_corr = self.correct_dark(self.bright)  # this could be done only once
+        data_corr = (data_corr * 65535).astype(np.uint16)
+        return data_corr
 
-        # step 2
-        self.bright_corr = self.correctBadPxs(self.bright_corr, mode=mode_hot)  # this too
-        self.bright_corr = norm_img(self.bright_corr)
+    def subtract_images(self, image: np.ndarray,
+                        corr: np.ndarray) -> np.ndarray:
+        """Subtract correction image from the data image
 
-        # step 3
-        self.img_corr = self.correct_bright(self.img_corr)
+        Args:
+            image (np.ndarray): Data image
+            corr (np.ndarray): Correction image
 
-        # step 4
-        self.img_corr = self.correctBadPxs(self.img_corr)
+        Returns:
+            np.ndarray: Corrected image
+        """
+        if (not np.issubdtype(image.dtype, np.integer) or
+                not np.issubdtype(corr.dtype, np.integer)):
+            self.logger.warning('Either data or corr is not np.integer type.')
+            data_corr = np.round(
+                            (image - corr.clip(None, image)),
+                            ).astype(np.uint16)
 
-        # step 5, make sure it is the same integer type as original img.
-        self.img_corr = img_to_int_type(self.img_corr, img_format)
+        else:
+            data_corr = image - corr
 
-        return self.img_corr
+        return data_corr
+
+    # helper methods
+    def set_dark(self, dark: np.ndarray) -> None:
+        """Update dark field correction image
+
+        Args:
+            dark (np.array): Dark field correction image
+        """
+        # rescale if necessary
+        if np.amax(dark) > 2**16-1 or np.amin(dark) < 0:
+            self.logger.warning('Dark field correction image is out of range.')
+            self.dark = rescale_img(dark, np.uint16)
+        else:
+            self.dark = dark
+
+    def set_bright(self, bright: np.ndarray) -> None:
+        """Update bright field correction image
+
+        Args:
+            bright (np.array): Bright field correction image
+        """
+        # rescale if necessary
+        if np.amax(bright) > 2**16-1 or np.amin(bright) < 0:
+            self.logger.warning(
+                'Bright field correction image is out of range.')
+            self.bright = rescale_img(bright, np.uint16)
+        else:
+            self.bright = bright
+
+    def set_bad(self, bad: np.ndarray) -> None:
+        """Update bad pixel correction image
+
+        Args:
+            bad (np.array): Bad pixel correction image
+        """
+        # rescale if necessary
+        if np.amax(bad) > 2**16-1 or np.amin(bad) < 0:
+            self.logger.warning('Bad pixel correction image is out of range.')
+            self.bad = rescale_img(bad, np.uint16)
+        else:
+            self.bad = bad
+
+    def set_std_mult(self, std_mult: float = 7.0) -> None:
+        """Update std_mult factor for bad pixel correction
+
+        Args:
+            std_mult (float): STD cutoff for outliers
+        """
+        if not np.issubdtype(type(std_mult), np.number):
+            std_mult = 7.0
+        elif std_mult <= 0:
+            raise ValueError('STD multiplier should be positive')
+
+        self.std_mult = float(std_mult)

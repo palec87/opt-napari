@@ -77,7 +77,8 @@ def bin_3d(stack: np.ndarray, bin_factor: int) -> np.ndarray:
     """
     Bin stack of images applying mean on the binned pixels.
     First dim is the stacking one. Binning is along axis 1, 2.
-    If 
+    If the stack is not divisible by bin_factor, the last pixels are
+    discarded.
     Result is casted on integer.
 
     Args:
@@ -103,7 +104,8 @@ def bin_3d(stack: np.ndarray, bin_factor: int) -> np.ndarray:
 
     # subarray of stack that equals height_dim * bin_factor
     if (height_dim * bin_factor != stack.shape[1] or
-        width_dim * bin_factor != stack.shape[2]):
+            width_dim * bin_factor != stack.shape[2]):
+
         stack = stack[:, :height_dim * bin_factor, :width_dim * bin_factor]
 
     # binning is done along axis 1 and 2, mean is applied
@@ -129,7 +131,8 @@ def norm_img(img: np.array, ret_type='float') -> np.array:
     Returns:
         np.array: normalized array to 1
     """
-    return img/np.amax(img) if ret_type == 'float' else (img/np.amax(img)).astype(ret_type)
+    return img/np.amax(img) if ret_type == 'float' else (
+        img/np.amax(img)).astype(ret_type)
 
 
 def img_to_int_type(img: np.array, dtype: np.dtype = np.int_) -> np.array:
@@ -167,3 +170,32 @@ def is_positive(img, corr_type='Unknown'):
         # return for testing purposes, can be better?
         return 1
     return 0
+
+
+# function to rescale image to dtype range, for instance 0-255 for uint8
+def rescale_img(img, dtype):
+    """
+    Rescale image to the range of the dtype.
+
+    Args:
+        img (np.array): img to rescale
+        dtype (np.dtype): dtype to rescale to
+
+    Returns:
+        np.array: rescaled img
+    """
+    if dtype == np.uint8:
+        if np.amax(img) == np.amin(img):
+            return np.ones(img.shape, dtype=dtype) * 255
+        # shift by min value and scale to 0-255
+        return ((img - np.amin(img)) /
+                (np.amax(img) - np.amin(img)) * 255).astype(dtype)
+
+    elif dtype == np.uint16:
+        if np.amax(img) == np.amin(img):
+            return np.ones(img.shape, dtype=dtype) * (2**16-1)
+        # shift by min value and scale to 0-2**16
+        return ((img - np.amin(img)) /
+                (np.amax(img) - np.amin(img)) * (2**16-1)).astype(dtype)
+    else:
+        return img
