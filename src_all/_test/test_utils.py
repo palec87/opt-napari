@@ -11,7 +11,8 @@ import pytest
 import numpy as np
 from ..utils import (
     select_roi, bin_3d, norm_img,
-    img_to_int_type, is_positive)
+    img_to_int_type, is_positive,
+    rescale_img)
 
 
 __author__ = 'David Palecek'
@@ -193,3 +194,35 @@ def testIsPositive(inputs, expected):
     """
     out = is_positive(*inputs)
     assert out == expected
+
+
+# test for rescale_img
+@pytest.mark.parametrize(
+    'img, dtype, expected',
+    [(np.ones((4, 4)), np.uint8, (np.ones((4, 4)) * 255).astype(np.uint8)),
+     (np.ones((4, 4)) * 255, np.uint8,
+      (np.ones((4, 4)) * 255).astype(np.uint8)),
+     (np.ones((4, 4)) * 256, np.uint8,
+      (np.ones((4, 4)) * 255).astype(np.uint8)),
+     (np.ones((4, 4)) * 65535, np.uint16, np.ones((4, 4)) * 65535),
+     (np.ones((4, 4)) * 65536, np.uint16, np.ones((4, 4)) * 65535),
+     ],
+    )
+def test_rescale_img(img, dtype, expected):
+    """
+    Test the rescale_img function.
+
+    Args:
+        img: Input array to be rescaled.
+        dtype: Desired data type of the output array.
+        expected: Expected output array after rescaling.
+
+    Returns:
+        None
+
+    Raises:
+        AssertionError: If the output array dtype or values do not match the
+            expected values.
+    """
+    out = rescale_img(img, dtype)
+    np.testing.assert_array_equal(out, expected)

@@ -16,13 +16,14 @@ __license__ = 'GPL'
 @pytest.mark.parametrize(
     'input_vals, expected',
     [({'flagBright': True, 'flagDark': True, 'flagExp': 'Transmission'},
-      ((np.ones((10, 5, 5)) * (10-0.1)/(11-0.1)).clip(0, 1) * 65535).astype(np.uint16)),
+      ((np.ones((10, 5, 5)) * (10-0.1)/(11-0.1)).clip(0, 1) * 65535,
+       ).astype(np.uint16)),
      ({'flagBright': False, 'flagDark': True, 'flagExp': 'Transmission'},
       (np.ones((10, 5, 5)) * 10).astype(np.uint16)),
      ({'flagBright': False, 'flagDark': False, 'flagExp': 'Transmission'},
       (np.ones((10, 5, 5)) * 10).astype(np.uint16)),
      ({'flagBright': True, 'flagDark': False, 'flagExp': 'Transmission'},
-      ((np.ones((10, 5, 5)) * 10 / 11).clip(0, 1) * 65535).astype(np.uint16)), 
+      ((np.ones((10, 5, 5)) * 10 / 11).clip(0, 1) * 65535).astype(np.uint16)),
      ({'flagBright': True, 'flagDark': True, 'flagExp': 'Emission'},
       (np.zeros((10, 5, 5))).astype(np.uint16)),
      # this should subtract dark only
@@ -50,7 +51,7 @@ def test_corrDB1(input_vals, expected, request):
     assert viewer.layers['Dark-Bright-corr_img'].data.dtype == expected.dtype
     # assert data
     assert np.allclose(viewer.layers['Dark-Bright-corr_img'].data, expected)
-    
+
     handlers = widget.log.handlers[:]
     for hndlr in handlers:
         widget.log.removeHandler(hndlr)
@@ -60,7 +61,8 @@ def test_corrDB1(input_vals, expected, request):
 @pytest.mark.parametrize(
     'input_vals, expected',
     [({'flagBright': True, 'flagDark': True, 'flagExp': 'Transmission'},
-      ((np.ones((10, 5, 5)) * (10-0.1)/(8.8-0.1)).clip(0, 1) * 65535).astype(np.uint16)),
+      ((np.ones((10, 5, 5)) * (10-0.1)/(8.8-0.1)).clip(0, 1) * 65535,
+       ).astype(np.uint16)),
      # not sure if this should be 9 or 10
      ({'flagBright': False, 'flagDark': True, 'flagExp': 'Transmission'},
       (np.ones((10, 5, 5)) * 10).astype(np.uint16)),
@@ -95,7 +97,7 @@ def test_corrDB2(input_vals, expected, request):
     assert viewer.layers['Dark-Bright-corr_img'].data.dtype == expected.dtype
     # assert data
     assert np.allclose(viewer.layers['Dark-Bright-corr_img'].data, expected)
-    
+
     handlers = widget.log.handlers[:]
     for hndlr in handlers:
         widget.log.removeHandler(hndlr)

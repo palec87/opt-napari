@@ -199,7 +199,7 @@ class PreprocessingnWidget(QWidget):
         logging.info(f'Hot pixels: {len(hotPxs)}, Dead pixels: {len(deadPxs)}')
 
         if self.ask_correct_bad_pixels(hotPxs, deadPxs) == QMessageBox.No:
-            self.add_bad_pixels_labels(hotPxs, deadPxs)
+            self.add_bad_pixels_labels()
             return
 
         # Correction is done, TODO: ooptimized for the volumes and threaded
