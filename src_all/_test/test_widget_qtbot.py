@@ -47,3 +47,29 @@ def test_bad_pixels1_no_corr(init_vals, expected, request, monkeypatch):
     for hndlr in handlers:
         widget.log.removeHandler(hndlr)
         hndlr.close()
+
+
+# test ask_correct_bad_pixels
+def test_ask_correct_bad_pixels(request, monkeypatch):
+    viewer, widget = request.getfixturevalue("prepare_widget_data1")
+
+    monkeypatch.setattr(widget, "ask_correct_bad_pixels",
+                        lambda *args: QMessageBox.Yes)
+    img = np.ones((5, 5, 5)) * 10
+    img[0, 1,  2] = 1
+    img[0, 2, 1] = 30
+
+    ret = img.copy()
+    ret[0, 2,  1] = 10
+    viewer.layers['img'].data = img
+    widget.std_cutoff.val = 2.0
+    widget.correctBadPixels()
+
+    assert viewer.layers['img'].data.shape == img.shape
+    assert np.array_equal(viewer.layers['img'].data[0], ret[0])
+    assert np.array_equal(viewer.layers['img'].data, ret)
+
+    handlers = widget.log.handlers[:]
+    for hndlr in handlers:
+        widget.log.removeHandler(hndlr)
+        hndlr.close()

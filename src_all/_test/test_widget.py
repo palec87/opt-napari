@@ -109,6 +109,58 @@ def test_corrDB2(input_vals, expected, request):
         hndlr.close()
 
 
+# test corrIntensity method
+# TODO: parametrize with more realistic cases
+def test_corrIntensity1(request):
+    viewer, widget = request.getfixturevalue("prepare_widget_data1")
+    expected = np.ones((10, 5, 5)) * 10
+
+    widget.inplace.val, widget.track.val = False, False
+    widget.updateHistoryFlags()
+
+    assert widget.history._update_compatible() is False
+    assert np.array_equal(widget.corr.dark, np.ones((5, 5)) * 0.1)
+
+    widget.correctIntensity()
+    # assert shape
+    assert viewer.layers['img'].data.shape == expected.shape
+    # assert dtype
+    # assert viewer.layers['Int-corr_img'].data.dtype == expected.dtype
+    # assert data
+    assert np.allclose(viewer.layers['Int-corr_img'].data, expected)
+
+    handlers = widget.log.handlers[:]
+    for hndlr in handlers:
+        widget.log.removeHandler(hndlr)
+        hndlr.close()
+
+
+# test calcLog method
+# TODO: parametrize with more realistic cases
+def test_calcLog1(request):
+    viewer, widget = request.getfixturevalue("prepare_widget_data1")
+
+    widget.inplace.val, widget.track.val = False, False
+    widget.updateHistoryFlags()
+    expected = -np.log10(np.ones((10, 5, 5)) * 10)
+
+    assert widget.history._update_compatible() is False
+    assert np.array_equal(widget.corr.dark, np.ones((5, 5)) * 0.1)
+
+    widget.calcLog()
+    # assert shape
+    assert viewer.layers['img'].data.shape == expected.shape
+    # assert dtype
+    # assert viewer.layers['Log_img'].data.dtype == expected.dtype
+    # assert data
+    assert np.allclose(viewer.layers['-Log_img'].data, expected)
+
+    handlers = widget.log.handlers[:]
+    for hndlr in handlers:
+        widget.log.removeHandler(hndlr)
+        hndlr.close()
+
+
 def test_show_image(request):
     _, widget = request.getfixturevalue("prepare_widget_data1")
     widget.inplace.val, widget.track.val = False, False

@@ -158,7 +158,7 @@ def test_correct_hot(inits, img, expected):
     corr = Correct(*inits)
     corr.get_bad_pxs()
     corrected = corr.correctBadPxs(img)
-    assert corrected.all() == expected.all()
+    assert np.array_equal(corrected, expected)
 
 
 # testing n4, n8 methods, this data has only 1 hot pixel
@@ -401,7 +401,7 @@ ret[:, 1, :] = 0
      ({'data': arr},
       arr,),
      ({'data': arr * 0.1},
-      arr * 0.1,), 
+      arr * 0.1,),
      ({'data': arr1},
       ret,),
      ({'data': np.array(([[0.1, 2**16-1], [0.1, -1]]))},
@@ -424,7 +424,7 @@ def test_set_dark(input_vals, expected):
      ({'data': arr},
       arr,),
      ({'data': arr * 0.1},
-      arr * 0.1,), 
+      arr * 0.1,),
      ({'data': arr1},
       ret,),
      ({'data': np.array(([[0.1, 2**16-1], [0.1, -1]]))},
@@ -445,7 +445,7 @@ def test_set_bright(input_vals, expected):
      ({'data': np.ones((10, 5, 5)) * -1},
       np.ones((10, 5, 5)) * 2**16-1,),
      ({'data': arr},
-      arr,), 
+      arr,),
      ({'data': arr * 0.1},
       arr * 0.1,),
      ({'data': arr1},

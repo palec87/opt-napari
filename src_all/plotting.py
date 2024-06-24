@@ -23,8 +23,9 @@ class PlotDialog(QDialog):
         super(PlotDialog, self).__init__(parent)
         self.mainWidget = QWidget()
         layout = QVBoxLayout(self.mainWidget)
-        canvas = IntCorrCanvas(report, self.mainWidget, width=300, height=300)
-        layout.addWidget(canvas)
+        self.canvas = IntCorrCanvas(report, self.mainWidget,
+                                    width=300, height=300)
+        layout.addWidget(self.canvas)
         self.setLayout(layout)
 
 
