@@ -433,7 +433,7 @@ class Correct():
             self.logger.warning('Dark field correction image is out of range.')
             self.dark = rescale_img(dark, np.uint16)
         else:
-            self.dark = dark.astype(np.uint16)
+            self.dark = dark
 
     def set_bright(self, bright: np.ndarray) -> None:
         """Update bright field correction image
@@ -447,7 +447,7 @@ class Correct():
                 'Bright field correction image is out of range.')
             self.bright = rescale_img(bright, np.uint16)
         else:
-            self.bright = bright.astype(np.uint16)
+            self.bright = bright
 
     def set_bad(self, bad: np.ndarray) -> None:
         """Update bad pixel correction image
@@ -460,7 +460,7 @@ class Correct():
             self.logger.warning('Bad pixel correction image is out of range.')
             self.bad = rescale_img(bad, np.uint16)
         else:
-            self.bad = bad.astype(np.uint16)
+            self.bad = bad
 
     def set_std_mult(self, std_mult: float = 7.0) -> None:
         """Update std_mult factor for bad pixel correction

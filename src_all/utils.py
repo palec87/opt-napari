@@ -131,8 +131,8 @@ def norm_img(img: np.array, ret_type='float') -> np.array:
     Returns:
         np.array: normalized array to 1
     """
-    return img/np.amax(img) if ret_type == 'float' else (img/np.amax(img),
-                                                         ).astype(ret_type)
+    return img/np.amax(img) if ret_type == 'float' else (
+        img/np.amax(img)).astype(ret_type)
 
 
 def img_to_int_type(img: np.array, dtype: np.dtype = np.int_) -> np.array:
