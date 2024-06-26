@@ -38,7 +38,6 @@ class neighbours_choice_modes(Enum):
     n8 = 2
 
 
-# TODO: Correct() as a class attribute? Right now it is created in each method
 def layer_container_and_selection(
         viewer=None,
         layer_type=Image,
@@ -203,6 +202,7 @@ class PreprocessingnWidget(QWidget):
             return
 
         # Correction is done, TODO: ooptimized for the volumes and threaded
+        # TODO: show progress bar in the widget.
         data_corr = np.zeros(original_image.data.shape,
                              dtype=original_image.data.dtype)
         for i, img in enumerate(original_image.data):
@@ -242,7 +242,7 @@ class PreprocessingnWidget(QWidget):
                                     use_bright=False,
                                     rect_dim=self.rectSize.val)
 
-        # TODO: open widget with a intensity plots
+        # open widget with a intensity plots
         self.plotDialog = PlotDialog(self, corr_dict)
         self.plotDialog.resize(800, 400)
         self.plotDialog.show()
